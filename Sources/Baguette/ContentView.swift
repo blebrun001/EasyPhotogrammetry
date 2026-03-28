@@ -6,133 +6,231 @@ import UniformTypeIdentifiers
 struct ContentView: View {
     @StateObject var viewModel: PhotogrammetryViewModel
 
+    private let supportedContentTypes: [UTType] = [
+        .jpeg,
+        .png,
+        .heic,
+        .tiff,
+        .image
+    ]
+
     var body: some View {
+        Form {
+            Section("Import") {
+                importSection
+            }
+
+            Section("Configuration") {
+                configurationSection
+            }
+
+            Section("Status") {
+                statusSection
+            }
+        }
+        .formStyle(.grouped)
+        .padding(16)
+        .fileImporter(
+            isPresented: $viewModel.isImportPickerPresented,
+            allowedContentTypes: supportedContentTypes,
+            allowsMultipleSelection: true
+        ) { result in
+            switch result {
+            case .success(let urls):
+                viewModel.handleImportedImageURLs(urls, behavior: .append)
+            case .failure(let error):
+                viewModel.state = .failed(message: error.localizedDescription)
+            }
+        }
+    }
+
+    private var importSection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            dropZone
+            dropZoneContainer
 
-            HStack(spacing: 8) {
-                Label(viewModel.compactImageCountText, systemImage: "photo.stack")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
-
-                Spacer(minLength: 0)
-
-                qualityMenu
-            }
-
-            HStack(spacing: 8) {
-                Button("Run") {
-                    Task {
-                        await viewModel.generateModel()
+            if !viewModel.droppedImageURLs.isEmpty {
+                HStack(spacing: 8) {
+                    Button {
+                        viewModel.clearSelection()
+                    } label: {
+                        Label("Clear", systemImage: "xmark")
                     }
+                    .disabled(!viewModel.canClearSelection)
+                    .help("Clear selected images")
                 }
-                .keyboardShortcut(.defaultAction)
-                .buttonStyle(.borderedProminent)
-                .controlSize(.small)
-                .disabled(!viewModel.canGenerateModel)
-
-                if case .completed(let url) = viewModel.state {
-                    Button("Open") {
-                        NSWorkspace.shared.open(url)
-                    }
-                    .controlSize(.small)
-                }
-            }
-
-            statusSection
-
-            Spacer(minLength: 0)
-        }
-        .padding(14)
-    }
-
-    private var qualityMenu: some View {
-        Picker("Quality", selection: $viewModel.selectedQuality) {
-            ForEach(ModelQuality.allCases) { quality in
-                Text(quality.shortLabel)
-                    .tag(quality)
             }
         }
-        .pickerStyle(.menu)
-        .labelsHidden()
-        .disabled({
-            if case .processing = viewModel.state {
-                return true
-            }
-            return false
-        }())
-        .help("Quality")
+        .accessibilityLabel("Import Area")
+        .accessibilityHint("Drag and drop images here, or click to open the file picker")
     }
 
-    private var dropZone: some View {
-        RoundedRectangle(cornerRadius: 10)
-            .stroke(viewModel.isDropTargeted ? Color.accentColor : Color.gray.opacity(0.35), style: StrokeStyle(lineWidth: 1.5, dash: [6]))
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color.gray.opacity(0.04))
-            )
-            .frame(maxWidth: .infinity, minHeight: 168)
-            .overlay {
-                if viewModel.droppedImageURLs.isEmpty {
-                    VStack(spacing: 6) {
-                        Image(systemName: "square.and.arrow.down")
-                            .font(.system(size: 20))
-                            .foregroundStyle(.secondary)
-                        Text("Drop images")
-                            .font(.subheadline.weight(.medium))
-                            .foregroundStyle(.secondary)
-                    }
-                } else {
-                    VStack(alignment: .leading, spacing: 6) {
-                        ScrollView {
-                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 60), spacing: 6)], spacing: 6) {
-                                ForEach(viewModel.droppedImageURLs, id: \.self) { imageURL in
-                                    ThumbnailView(imageURL: imageURL)
-                                }
-                            }
-                        }
-
-                        Text("Drop to replace")
-                            .font(.caption2)
-                            .foregroundStyle(.secondary)
-                    }
-                    .padding(8)
+    private var configurationSection: some View {
+        LabeledContent("Quality") {
+            Picker("Quality", selection: $viewModel.selectedQuality) {
+                ForEach(ModelQuality.allCases) { quality in
+                    Text(quality.label)
+                        .tag(quality)
                 }
             }
-            .onDrop(of: [UTType.fileURL.identifier], isTargeted: $viewModel.isDropTargeted, perform: viewModel.handleDroppedItems)
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .disabled(!viewModel.canImportImages)
+            .help("Choose generation quality")
+        }
     }
 
     @ViewBuilder
-    private var statusSection: some View {
-        switch viewModel.state {
-        case .processing(let progress):
-            HStack(spacing: 8) {
-                Text("\(Int(progress * 100))%")
-                    .font(.caption.monospacedDigit())
+    private var dropZone: some View {
+        if viewModel.droppedImageURLs.isEmpty {
+            VStack(spacing: 8) {
+                Image(systemName: "tray.and.arrow.down")
+                    .font(.title3)
                     .foregroundStyle(.secondary)
-                ProgressView(value: progress)
-                    .controlSize(.small)
             }
-        case .failed(let message):
-            Text(message)
-                .font(.caption)
-                .lineLimit(1)
-                .truncationMode(.tail)
-                .foregroundStyle(.red)
-        case .completed(let url):
-            Text("Done • \(url.lastPathComponent)")
-                .font(.caption)
-                .lineLimit(1)
-                .truncationMode(.middle)
-                .foregroundStyle(.green)
-        case .ready:
-            Text("Ready")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        case .idle:
-            Text("Drop to start")
-                .font(.caption)
-                .foregroundStyle(.secondary)
+        } else {
+            VStack(alignment: .leading, spacing: 8) {
+                ScrollView {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 72), spacing: 8)], spacing: 8) {
+                        ForEach(viewModel.droppedImageURLs, id: \.self) { imageURL in
+                            ThumbnailView(imageURL: imageURL)
+                        }
+                    }
+                    .padding(.vertical, 2)
+                }
+                .frame(minHeight: 88, maxHeight: 220)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .padding(.horizontal, 2)
+        }
+    }
+
+    private var dropZoneContainer: some View {
+        dropZone
+            .frame(maxWidth: .infinity, minHeight: 130)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                viewModel.presentImportPicker()
+            }
+            .help("Click to choose images, or drop files")
+            .dropDestination(for: URL.self) { urls, _ in
+                viewModel.handleImportedImageURLs(urls, behavior: .replace)
+                return true
+            } isTargeted: { targeted in
+                viewModel.isDropTargeted = targeted
+            }
+    }
+
+    private var statusSection: some View {
+        let presentation = viewModel.state.presentation
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                Image(systemName: presentation.symbolName)
+                    .foregroundStyle(color(for: presentation.tone))
+
+                Text(presentation.title)
+                    .font(.headline)
+            }
+
+            if let detail = presentation.detail {
+                Text(detail)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+
+            if let progress = presentation.progress {
+                HStack(spacing: 8) {
+                    ProgressView(value: progress)
+                        .controlSize(.small)
+
+                    if let progressText = presentation.progressText {
+                        Text(progressText)
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+
+            HStack(spacing: 8) {
+                if viewModel.canCancelGeneration {
+                    Button(role: .destructive) {
+                        viewModel.cancelGeneration()
+                    } label: {
+                        Label("Stop", systemImage: "stop.fill")
+                    }
+                    .keyboardShortcut(.cancelAction)
+                    .help("Stop model generation")
+                    .accessibilityLabel("Stop Generation")
+                    .accessibilityHint("Cancel the 3D model generation in progress")
+                } else {
+                    Button {
+                        viewModel.generateModel()
+                    } label: {
+                        Label("Generate", systemImage: "sparkles")
+                    }
+                    .keyboardShortcut(.defaultAction)
+                    .disabled(!viewModel.canGenerateModel)
+                    .help("Generate a USDZ model")
+                    .accessibilityLabel("Generate Model")
+                    .accessibilityHint("Run Apple Object Capture with selected images")
+                }
+
+                if let outputURL = viewModel.outputURL {
+                    Button {
+                        NSWorkspace.shared.open(outputURL)
+                    } label: {
+                        Label("Open", systemImage: "arrow.up.forward.app")
+                    }
+                    .help("Open the generated USDZ model")
+                    .accessibilityLabel("Open Model")
+                    .accessibilityHint("Open the generated USDZ file in Finder or default app")
+
+                    Button {
+                        presentSavePanel(for: outputURL)
+                    } label: {
+                        Label("Save…", systemImage: "square.and.arrow.down")
+                    }
+                    .disabled(!viewModel.canSaveGeneratedModel)
+                    .help("Save the generated model with a custom name")
+                    .accessibilityLabel("Save Model")
+                    .accessibilityHint("Choose where to save the generated USDZ model")
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Processing Status")
+        .accessibilityValue(presentation.title)
+    }
+
+    private func presentSavePanel(for outputURL: URL) {
+        let panel = NSSavePanel()
+        if let usdzType = UTType(filenameExtension: "usdz") {
+            panel.allowedContentTypes = [usdzType]
+        }
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = "Model.usdz"
+        panel.directoryURL = outputURL.deletingLastPathComponent()
+
+        guard panel.runModal() == .OK, let destinationURL = panel.url else {
+            return
+        }
+
+        do {
+            try viewModel.saveGeneratedModel(to: destinationURL)
+        } catch {
+            viewModel.state = .failed(message: "Unable to save model: \(error.localizedDescription)")
+        }
+    }
+
+    private func color(for tone: StatusPresentation.Tone) -> Color {
+        switch tone {
+        case .secondary:
+            return .secondary
+        case .success:
+            return .green
+        case .error:
+            return .red
         }
     }
 }
@@ -150,8 +248,8 @@ private struct ThumbnailView: View {
                     .resizable()
                     .scaledToFill()
             } else {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.gray.opacity(0.2))
+                Rectangle()
+                    .fill(Color.secondary.opacity(0.12))
                     .overlay {
                         if isLoading {
                             ProgressView()
@@ -163,11 +261,12 @@ private struct ThumbnailView: View {
                     }
             }
         }
-        .frame(width: 60, height: 60)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .frame(width: 72, height: 72)
+        .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         .task(id: imageURL) {
             await loadThumbnailIfNeeded()
         }
+        .accessibilityLabel(imageURL.lastPathComponent)
     }
 
     @MainActor
@@ -177,7 +276,7 @@ private struct ThumbnailView: View {
 
         let loaded = await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .userInitiated).async {
-                continuation.resume(returning: Self.makeThumbnail(from: imageURL, maxPixelSize: 144))
+                continuation.resume(returning: Self.makeThumbnail(from: imageURL, maxPixelSize: 200))
             }
         }
 

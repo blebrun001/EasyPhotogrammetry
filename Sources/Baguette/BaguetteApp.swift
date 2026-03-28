@@ -6,6 +6,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             AppIconBootstrap.apply()
         }
     }
+
+    func applicationWillTerminate(_ notification: Notification) {
+        TemporaryGenerationStore.shared.cleanupAll()
+    }
 }
 
 @main
@@ -15,7 +19,8 @@ struct BaguetteApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView(viewModel: PhotogrammetryViewModel(service: PhotogrammetryService()))
-                .frame(minWidth: 720, minHeight: 520)
+                .frame(minWidth: 760, minHeight: 560)
         }
+        .defaultSize(width: 900, height: 680)
     }
 }
