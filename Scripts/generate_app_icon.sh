@@ -3,12 +3,17 @@ set -euo pipefail
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 OUT_DIR="$ROOT_DIR/Sources/Baguette/Resources"
+ASSETS_DIR="$OUT_DIR/Assets.xcassets"
+APPICON_DIR="$ASSETS_DIR/AppIcon.appiconset"
 ICONSET_DIR="$ROOT_DIR/.build/Baguette.iconset"
 ICNS_PATH="$OUT_DIR/Baguette.icns"
 
 mkdir -p "$OUT_DIR"
+mkdir -p "$ASSETS_DIR"
 rm -rf "$ICONSET_DIR"
+rm -rf "$APPICON_DIR"
 mkdir -p "$ICONSET_DIR"
+mkdir -p "$APPICON_DIR"
 
 SWIFT_RENDERER="$ROOT_DIR/.build/render_baguette_icon.swift"
 cat > "$SWIFT_RENDERER" <<'SWIFT'
@@ -26,23 +31,60 @@ guard let sizeValue = Double(CommandLine.arguments[1]), sizeValue > 0 else {
 }
 
 let outputPath = CommandLine.arguments[2]
-let canvasSize = NSSize(width: sizeValue, height: sizeValue)
+let pixelSize = Int(sizeValue)
+let canvasSize = NSSize(width: Double(pixelSize), height: Double(pixelSize))
 let canvasRect = NSRect(origin: .zero, size: canvasSize)
+let inset = sizeValue * 0.04
+let iconRect = canvasRect.insetBy(dx: inset, dy: inset)
+let cornerRadius = sizeValue * 0.22
 
-let image = NSImage(size: canvasSize)
-image.lockFocus()
+guard
+    let bitmap = NSBitmapImageRep(
+        bitmapDataPlanes: nil,
+        pixelsWide: pixelSize,
+        pixelsHigh: pixelSize,
+        bitsPerSample: 8,
+        samplesPerPixel: 4,
+        hasAlpha: true,
+        isPlanar: false,
+        colorSpaceName: .deviceRGB,
+        bytesPerRow: 0,
+        bitsPerPixel: 0
+    )
+else {
+    fputs("Failed to allocate bitmap\n", stderr)
+    exit(1)
+}
 
-NSColor.white.setFill()
+guard let context = NSGraphicsContext(bitmapImageRep: bitmap) else {
+    fputs("Failed to create graphics context\n", stderr)
+    exit(1)
+}
+NSGraphicsContext.saveGraphicsState()
+NSGraphicsContext.current = context
+
+NSColor.clear.setFill()
 canvasRect.fill()
 
-let baseFont = NSFont.systemFont(ofSize: sizeValue * 0.92)
+let gradient = NSGradient(
+    starting: NSColor(calibratedRed: 0.98, green: 0.84, blue: 0.45, alpha: 1.0),
+    ending: NSColor(calibratedRed: 0.90, green: 0.66, blue: 0.25, alpha: 1.0)
+)!
+let roundedRect = NSBezierPath(roundedRect: iconRect, xRadius: cornerRadius, yRadius: cornerRadius)
+gradient.draw(in: roundedRect, angle: 90)
+
+NSColor(calibratedWhite: 0.0, alpha: 0.12).setStroke()
+roundedRect.lineWidth = max(1, sizeValue * 0.02)
+roundedRect.stroke()
+
+let baseFont = NSFont.systemFont(ofSize: sizeValue * 0.78)
 let paragraphStyle = NSMutableParagraphStyle()
 paragraphStyle.alignment = .center
 
 let attributes: [NSAttributedString.Key: Any] = [
     .font: baseFont,
     .paragraphStyle: paragraphStyle,
-    .foregroundColor: NSColor.black
+    .foregroundColor: NSColor(calibratedWhite: 0.12, alpha: 1.0)
 ]
 
 let emoji = "🥖" as NSString
@@ -52,14 +94,9 @@ let drawPoint = NSPoint(
     y: (sizeValue - textSize.height) / 2.0
 )
 emoji.draw(at: drawPoint, withAttributes: attributes)
+NSGraphicsContext.restoreGraphicsState()
 
-image.unlockFocus()
-
-guard
-    let tiffData = image.tiffRepresentation,
-    let bitmap = NSBitmapImageRep(data: tiffData),
-    let pngData = bitmap.representation(using: .png, properties: [:])
-else {
+guard let pngData = bitmap.representation(using: .png, properties: [:]) else {
     fputs("Failed to render PNG\n", stderr)
     exit(1)
 }
@@ -92,4 +129,37 @@ render_png 1024 icon_512x512@2x.png
 
 iconutil -c icns "$ICONSET_DIR" -o "$ICNS_PATH"
 
+cp "$ICONSET_DIR"/icon_16x16.png "$APPICON_DIR"/
+cp "$ICONSET_DIR"/icon_16x16@2x.png "$APPICON_DIR"/
+cp "$ICONSET_DIR"/icon_32x32.png "$APPICON_DIR"/
+cp "$ICONSET_DIR"/icon_32x32@2x.png "$APPICON_DIR"/
+cp "$ICONSET_DIR"/icon_128x128.png "$APPICON_DIR"/
+cp "$ICONSET_DIR"/icon_128x128@2x.png "$APPICON_DIR"/
+cp "$ICONSET_DIR"/icon_256x256.png "$APPICON_DIR"/
+cp "$ICONSET_DIR"/icon_256x256@2x.png "$APPICON_DIR"/
+cp "$ICONSET_DIR"/icon_512x512.png "$APPICON_DIR"/
+cp "$ICONSET_DIR"/icon_512x512@2x.png "$APPICON_DIR"/
+
+cat > "$APPICON_DIR/Contents.json" <<'JSON'
+{
+  "images" : [
+    { "filename" : "icon_16x16.png", "idiom" : "mac", "scale" : "1x", "size" : "16x16" },
+    { "filename" : "icon_16x16@2x.png", "idiom" : "mac", "scale" : "2x", "size" : "16x16" },
+    { "filename" : "icon_32x32.png", "idiom" : "mac", "scale" : "1x", "size" : "32x32" },
+    { "filename" : "icon_32x32@2x.png", "idiom" : "mac", "scale" : "2x", "size" : "32x32" },
+    { "filename" : "icon_128x128.png", "idiom" : "mac", "scale" : "1x", "size" : "128x128" },
+    { "filename" : "icon_128x128@2x.png", "idiom" : "mac", "scale" : "2x", "size" : "128x128" },
+    { "filename" : "icon_256x256.png", "idiom" : "mac", "scale" : "1x", "size" : "256x256" },
+    { "filename" : "icon_256x256@2x.png", "idiom" : "mac", "scale" : "2x", "size" : "256x256" },
+    { "filename" : "icon_512x512.png", "idiom" : "mac", "scale" : "1x", "size" : "512x512" },
+    { "filename" : "icon_512x512@2x.png", "idiom" : "mac", "scale" : "2x", "size" : "512x512" }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}
+JSON
+
 echo "Generated: $ICNS_PATH"
+echo "Generated: $APPICON_DIR"
