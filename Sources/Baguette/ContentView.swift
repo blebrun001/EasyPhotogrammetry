@@ -20,6 +20,25 @@ struct ContentView: View {
                 .font(.subheadline)
                 .foregroundStyle(.secondary)
 
+            HStack(spacing: 12) {
+                Text("Qualité 3D")
+                    .font(.subheadline.weight(.semibold))
+
+                Picker("Qualité 3D", selection: $viewModel.selectedQuality) {
+                    ForEach(ModelQuality.allCases) { quality in
+                        Text(quality.label)
+                            .tag(quality)
+                    }
+                }
+                .pickerStyle(.menu)
+                .disabled({
+                    if case .processing = viewModel.state {
+                        return true
+                    }
+                    return false
+                }())
+            }
+
             statusSection
 
             HStack(spacing: 12) {

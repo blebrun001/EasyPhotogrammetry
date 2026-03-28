@@ -2,12 +2,53 @@ import Foundation
 import RealityKit
 import UniformTypeIdentifiers
 
+enum ModelQuality: String, CaseIterable, Identifiable {
+    case preview
+    case reduced
+    case medium
+    case full
+    case raw
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .preview:
+            return "Aperçu (rapide)"
+        case .reduced:
+            return "Réduite"
+        case .medium:
+            return "Moyenne"
+        case .full:
+            return "Élevée"
+        case .raw:
+            return "Brute (max)"
+        }
+    }
+
+    var detail: PhotogrammetrySession.Request.Detail {
+        switch self {
+        case .preview:
+            return .preview
+        case .reduced:
+            return .reduced
+        case .medium:
+            return .medium
+        case .full:
+            return .full
+        case .raw:
+            return .raw
+        }
+    }
+}
+
 /// Main UI state holder for drag-and-drop and model generation flow.
 @MainActor
 final class PhotogrammetryViewModel: ObservableObject {
     @Published private(set) var droppedImageURLs: [URL] = []
     @Published var state: ProcessingState = .idle
     @Published var isDropTargeted = false
+    @Published var selectedQuality: ModelQuality = .full
 
     private let service: PhotogrammetryServicing
 
@@ -75,7 +116,7 @@ final class PhotogrammetryViewModel: ObservableObject {
         do {
             let outputURL = try await service.generateUSDZ(
                 from: droppedImageURLs,
-                detail: .full,
+                detail: selectedQuality.detail,
                 onProgress: { [weak self] progress in
                     Task { @MainActor in
                         guard let self else { return }
