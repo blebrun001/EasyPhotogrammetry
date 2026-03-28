@@ -67,8 +67,8 @@ NSColor.clear.setFill()
 canvasRect.fill()
 
 let gradient = NSGradient(
-    starting: NSColor(calibratedRed: 0.98, green: 0.84, blue: 0.45, alpha: 1.0),
-    ending: NSColor(calibratedRed: 0.90, green: 0.66, blue: 0.25, alpha: 1.0)
+    starting: NSColor(calibratedRed: 0.64, green: 0.84, blue: 0.98, alpha: 1.0),
+    ending: NSColor(calibratedRed: 0.20, green: 0.52, blue: 0.92, alpha: 1.0)
 )!
 let roundedRect = NSBezierPath(roundedRect: iconRect, xRadius: cornerRadius, yRadius: cornerRadius)
 gradient.draw(in: roundedRect, angle: 90)

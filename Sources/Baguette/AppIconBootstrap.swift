@@ -4,14 +4,19 @@ import Foundation
 enum AppIconBootstrap {
     @MainActor
     static func apply() {
+        var candidateBundles: [Bundle] = [.main]
         #if SWIFT_PACKAGE
-            guard
-                let iconURL = Bundle.module.url(forResource: "Baguette", withExtension: "icns"),
+            candidateBundles.append(.module)
+        #endif
+
+        for bundle in candidateBundles {
+            if
+                let iconURL = bundle.url(forResource: "Baguette", withExtension: "icns"),
                 let icon = NSImage(contentsOf: iconURL)
-            else {
+            {
+                NSApplication.shared.applicationIconImage = icon
                 return
             }
-            NSApplication.shared.applicationIconImage = icon
-        #endif
+        }
     }
 }
