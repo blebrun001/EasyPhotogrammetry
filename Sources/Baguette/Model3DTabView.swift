@@ -8,11 +8,11 @@ struct Model3DTabView: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            Group {
-                if let modelURL {
-                    QuickLookModelPreview(url: modelURL)
-                        .id(instanceID)
-                } else {
+            ZStack {
+                QuickLookModelPreview(url: modelURL)
+                    .id(instanceID)
+
+                if modelURL == nil {
                     unavailablePlaceholder
                 }
             }
@@ -49,7 +49,7 @@ struct Model3DTabView: View {
 }
 
 private struct QuickLookModelPreview: NSViewRepresentable {
-    let url: URL
+    let url: URL?
 
     final class Coordinator {
         var currentURL: URL?
@@ -64,10 +64,28 @@ private struct QuickLookModelPreview: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: QLPreviewView, context: Context) {
-        if context.coordinator.currentURL != url || nsView.previewItem == nil {
+        guard let url else {
+            context.coordinator.currentURL = nil
+            nsView.previewItem = nil
+            return
+        }
+
+        guard FileManager.default.fileExists(atPath: url.path) else {
+            context.coordinator.currentURL = nil
+            nsView.previewItem = nil
+            return
+        }
+
+        let shouldUpdatePreviewItem = context.coordinator.currentURL != url || nsView.previewItem == nil
+        if shouldUpdatePreviewItem {
             context.coordinator.currentURL = url
             nsView.previewItem = url as NSURL
+            nsView.refreshPreviewItem()
         }
-        nsView.refreshPreviewItem()
+    }
+
+    static func dismantleNSView(_ nsView: QLPreviewView, coordinator: Coordinator) {
+        coordinator.currentURL = nil
+        nsView.previewItem = nil
     }
 }
