@@ -8,7 +8,10 @@ let package = Package(
     ],
     targets: [
         .executableTarget(
-            name: "Baguette"
+            name: "Baguette",
+            resources: [
+                .process("Resources"),
+            ]
         ),
     ]
 )
