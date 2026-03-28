@@ -21,7 +21,7 @@
 	<key>LSMinimumSystemVersion</key>
 	<string>$(MACOSX_DEPLOYMENT_TARGET)</string>
 	<key>NSHumanReadableCopyright</key>
-	<string></string>
+	<string>made by Brice Lebrun - IPHES-CERCA</string>
 	<key>NSPrincipalClass</key>
 	<string>NSApplication</string>
 </dict>

@@ -40,7 +40,7 @@ enum ProcessingState: Equatable {
             return StatusPresentation(
                 title: "Ready",
                 detail: nil,
-                symbolName: "circle",
+                symbolName: nil,
                 tone: .secondary,
                 progress: nil
             )
