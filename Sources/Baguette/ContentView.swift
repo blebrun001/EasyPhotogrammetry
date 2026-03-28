@@ -1,4 +1,5 @@
 import AppKit
+import ImageIO
 import SwiftUI
 import UniformTypeIdentifiers
 
@@ -69,7 +70,7 @@ struct ContentView: View {
                         ScrollView {
                             LazyVGrid(columns: [GridItem(.adaptive(minimum: 72), spacing: 8)], spacing: 8) {
                                 ForEach(viewModel.droppedImageURLs, id: \.self) { imageURL in
-                                    thumbnailView(for: imageURL)
+                                    ThumbnailView(imageURL: imageURL)
                                 }
                             }
                         }
@@ -82,25 +83,6 @@ struct ContentView: View {
                 }
             }
             .onDrop(of: [UTType.fileURL.identifier], isTargeted: $viewModel.isDropTargeted, perform: viewModel.handleDroppedItems)
-    }
-
-    @ViewBuilder
-    private func thumbnailView(for imageURL: URL) -> some View {
-        if let image = NSImage(contentsOf: imageURL) {
-            Image(nsImage: image)
-                .resizable()
-                .scaledToFill()
-                .frame(width: 72, height: 72)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-        } else {
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color.gray.opacity(0.2))
-                .frame(width: 72, height: 72)
-                .overlay {
-                    Image(systemName: "photo")
-                        .foregroundStyle(.secondary)
-                }
-        }
     }
 
     @ViewBuilder
@@ -121,5 +103,76 @@ struct ContentView: View {
             Text(viewModel.state.statusText)
                 .foregroundStyle(.secondary)
         }
+    }
+}
+
+private struct ThumbnailView: View {
+    let imageURL: URL
+
+    @State private var image: NSImage?
+    @State private var isLoading = false
+
+    var body: some View {
+        Group {
+            if let image {
+                Image(nsImage: image)
+                    .resizable()
+                    .scaledToFill()
+            } else {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color.gray.opacity(0.2))
+                    .overlay {
+                        if isLoading {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Image(systemName: "photo")
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+            }
+        }
+        .frame(width: 72, height: 72)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .task(id: imageURL) {
+            await loadThumbnailIfNeeded()
+        }
+    }
+
+    @MainActor
+    private func loadThumbnailIfNeeded() async {
+        guard image == nil, !isLoading else { return }
+        isLoading = true
+
+        let loaded = await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                continuation.resume(returning: Self.makeThumbnail(from: imageURL, maxPixelSize: 144))
+            }
+        }
+
+        if !Task.isCancelled {
+            image = loaded
+        }
+
+        isLoading = false
+    }
+
+    nonisolated private static func makeThumbnail(from url: URL, maxPixelSize: Int) -> NSImage? {
+        guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {
+            return NSImage(contentsOf: url)
+        }
+
+        let options: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageIfAbsent: true,
+            kCGImageSourceCreateThumbnailFromImageAlways: true,
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: maxPixelSize
+        ]
+
+        guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+            return NSImage(contentsOf: url)
+        }
+
+        return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
     }
 }
