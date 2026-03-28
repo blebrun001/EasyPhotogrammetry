@@ -51,17 +51,56 @@ struct ContentView: View {
             )
             .frame(maxWidth: .infinity, minHeight: 220)
             .overlay {
-                VStack(spacing: 10) {
-                    Image(systemName: "photo.stack")
-                        .font(.system(size: 36))
-                    Text("Déposez des images ici")
-                        .font(.headline)
-                    Text("Formats supportés: \(SupportedImageFormat.userFacingList)")
-                        .font(.footnote)
-                        .foregroundStyle(.secondary)
+                if viewModel.droppedImageURLs.isEmpty {
+                    VStack(spacing: 10) {
+                        Image(systemName: "photo.stack")
+                            .font(.system(size: 36))
+                        Text("Déposez des images ici")
+                            .font(.headline)
+                        Text("Formats supportés: \(SupportedImageFormat.userFacingList)")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                } else {
+                    VStack(alignment: .leading, spacing: 10) {
+                        Text("Images ajoutées")
+                            .font(.headline)
+
+                        ScrollView {
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 72), spacing: 8)], spacing: 8) {
+                                ForEach(viewModel.droppedImageURLs, id: \.self) { imageURL in
+                                    thumbnailView(for: imageURL)
+                                }
+                            }
+                        }
+
+                        Text("Déposez à nouveau des images pour remplacer la sélection.")
+                            .font(.footnote)
+                            .foregroundStyle(.secondary)
+                    }
+                    .padding(12)
                 }
             }
             .onDrop(of: [UTType.fileURL.identifier], isTargeted: $viewModel.isDropTargeted, perform: viewModel.handleDroppedItems)
+    }
+
+    @ViewBuilder
+    private func thumbnailView(for imageURL: URL) -> some View {
+        if let image = NSImage(contentsOf: imageURL) {
+            Image(nsImage: image)
+                .resizable()
+                .scaledToFill()
+                .frame(width: 72, height: 72)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+        } else {
+            RoundedRectangle(cornerRadius: 8)
+                .fill(Color.gray.opacity(0.2))
+                .frame(width: 72, height: 72)
+                .overlay {
+                    Image(systemName: "photo")
+                        .foregroundStyle(.secondary)
+                }
+        }
     }
 
     @ViewBuilder
