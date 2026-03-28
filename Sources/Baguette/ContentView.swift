@@ -7,98 +7,96 @@ struct ContentView: View {
     @StateObject var viewModel: PhotogrammetryViewModel
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text("Baguette Photogrammetry")
-                .font(.title.bold())
-
-            Text("Glissez-déposez vos photos, puis lancez la génération du modèle 3D.")
-                .foregroundStyle(.secondary)
-
+        VStack(alignment: .leading, spacing: 10) {
             dropZone
 
-            Text(viewModel.imageCountText)
-                .font(.subheadline)
-                .foregroundStyle(.secondary)
+            HStack(spacing: 8) {
+                Label(viewModel.compactImageCountText, systemImage: "photo.stack")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
 
-            HStack(spacing: 12) {
-                Text("Qualité 3D")
-                    .font(.subheadline.weight(.semibold))
+                Spacer(minLength: 0)
 
-                Picker("Qualité 3D", selection: $viewModel.selectedQuality) {
-                    ForEach(ModelQuality.allCases) { quality in
-                        Text(quality.label)
-                            .tag(quality)
-                    }
-                }
-                .pickerStyle(.menu)
-                .disabled({
-                    if case .processing = viewModel.state {
-                        return true
-                    }
-                    return false
-                }())
+                qualityMenu
             }
 
-            statusSection
-
-            HStack(spacing: 12) {
-                Button("Créer le modèle 3D") {
+            HStack(spacing: 8) {
+                Button("Run") {
                     Task {
                         await viewModel.generateModel()
                     }
                 }
                 .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent)
+                .controlSize(.small)
                 .disabled(!viewModel.canGenerateModel)
 
                 if case .completed(let url) = viewModel.state {
-                    Button("Ouvrir le fichier") {
+                    Button("Open") {
                         NSWorkspace.shared.open(url)
                     }
+                    .controlSize(.small)
                 }
             }
 
-            Spacer()
+            statusSection
+
+            Spacer(minLength: 0)
         }
-        .padding(24)
+        .padding(14)
+    }
+
+    private var qualityMenu: some View {
+        Picker("Quality", selection: $viewModel.selectedQuality) {
+            ForEach(ModelQuality.allCases) { quality in
+                Text(quality.shortLabel)
+                    .tag(quality)
+            }
+        }
+        .pickerStyle(.menu)
+        .labelsHidden()
+        .disabled({
+            if case .processing = viewModel.state {
+                return true
+            }
+            return false
+        }())
+        .help("Quality")
     }
 
     private var dropZone: some View {
-        RoundedRectangle(cornerRadius: 12)
-            .stroke(viewModel.isDropTargeted ? Color.accentColor : Color.gray.opacity(0.5), style: StrokeStyle(lineWidth: 2, dash: [8]))
+        RoundedRectangle(cornerRadius: 10)
+            .stroke(viewModel.isDropTargeted ? Color.accentColor : Color.gray.opacity(0.35), style: StrokeStyle(lineWidth: 1.5, dash: [6]))
             .background(
-                RoundedRectangle(cornerRadius: 12)
-                    .fill(Color.gray.opacity(0.08))
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color.gray.opacity(0.04))
             )
-            .frame(maxWidth: .infinity, minHeight: 220)
+            .frame(maxWidth: .infinity, minHeight: 168)
             .overlay {
                 if viewModel.droppedImageURLs.isEmpty {
-                    VStack(spacing: 10) {
-                        Image(systemName: "photo.stack")
-                            .font(.system(size: 36))
-                        Text("Déposez des images ici")
-                            .font(.headline)
-                        Text("Formats supportés: \(SupportedImageFormat.userFacingList)")
-                            .font(.footnote)
+                    VStack(spacing: 6) {
+                        Image(systemName: "square.and.arrow.down")
+                            .font(.system(size: 20))
+                            .foregroundStyle(.secondary)
+                        Text("Drop images")
+                            .font(.subheadline.weight(.medium))
                             .foregroundStyle(.secondary)
                     }
                 } else {
-                    VStack(alignment: .leading, spacing: 10) {
-                        Text("Images ajoutées")
-                            .font(.headline)
-
+                    VStack(alignment: .leading, spacing: 6) {
                         ScrollView {
-                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 72), spacing: 8)], spacing: 8) {
+                            LazyVGrid(columns: [GridItem(.adaptive(minimum: 60), spacing: 6)], spacing: 6) {
                                 ForEach(viewModel.droppedImageURLs, id: \.self) { imageURL in
                                     ThumbnailView(imageURL: imageURL)
                                 }
                             }
                         }
 
-                        Text("Déposez à nouveau des images pour remplacer la sélection.")
-                            .font(.footnote)
+                        Text("Drop to replace")
+                            .font(.caption2)
                             .foregroundStyle(.secondary)
                     }
-                    .padding(12)
+                    .padding(8)
                 }
             }
             .onDrop(of: [UTType.fileURL.identifier], isTargeted: $viewModel.isDropTargeted, perform: viewModel.handleDroppedItems)
@@ -108,18 +106,32 @@ struct ContentView: View {
     private var statusSection: some View {
         switch viewModel.state {
         case .processing(let progress):
-            VStack(alignment: .leading, spacing: 8) {
-                Text("Traitement en cours... \(Int(progress * 100))%")
+            HStack(spacing: 8) {
+                Text("\(Int(progress * 100))%")
+                    .font(.caption.monospacedDigit())
+                    .foregroundStyle(.secondary)
                 ProgressView(value: progress)
+                    .controlSize(.small)
             }
         case .failed(let message):
-            Text("Erreur: \(message)")
+            Text(message)
+                .font(.caption)
+                .lineLimit(1)
+                .truncationMode(.tail)
                 .foregroundStyle(.red)
         case .completed(let url):
-            Text("Terminé: \(url.lastPathComponent)")
+            Text("Done • \(url.lastPathComponent)")
+                .font(.caption)
+                .lineLimit(1)
+                .truncationMode(.middle)
                 .foregroundStyle(.green)
-        default:
-            Text(viewModel.state.statusText)
+        case .ready:
+            Text("Ready")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        case .idle:
+            Text("Drop to start")
+                .font(.caption)
                 .foregroundStyle(.secondary)
         }
     }
@@ -151,7 +163,7 @@ private struct ThumbnailView: View {
                     }
             }
         }
-        .frame(width: 72, height: 72)
+        .frame(width: 60, height: 60)
         .clipShape(RoundedRectangle(cornerRadius: 8))
         .task(id: imageURL) {
             await loadThumbnailIfNeeded()

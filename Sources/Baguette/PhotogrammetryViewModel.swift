@@ -26,6 +26,21 @@ enum ModelQuality: String, CaseIterable, Identifiable {
         }
     }
 
+    var shortLabel: String {
+        switch self {
+        case .preview:
+            return "Preview"
+        case .reduced:
+            return "Reduced"
+        case .medium:
+            return "Medium"
+        case .full:
+            return "Full"
+        case .raw:
+            return "Raw"
+        }
+    }
+
     var detail: PhotogrammetrySession.Request.Detail {
         switch self {
         case .preview:
@@ -73,6 +88,10 @@ final class PhotogrammetryViewModel: ObservableObject {
 
     var imageCountText: String {
         "\(droppedImageURLs.count) photo(s) sélectionnée(s)"
+    }
+
+    var compactImageCountText: String {
+        "\(droppedImageURLs.count) img"
     }
 
     func handleDroppedItems(_ providers: [NSItemProvider]) -> Bool {
