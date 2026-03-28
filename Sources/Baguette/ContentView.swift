@@ -5,6 +5,74 @@ import UniformTypeIdentifiers
 
 struct ContentView: View {
     @StateObject var viewModel: PhotogrammetryViewModel
+    @State private var selectedTab: AppTab = .photos
+    @State private var modelPreviewInstanceID = UUID()
+
+    var body: some View {
+        TabView(selection: $selectedTab) {
+            PhotosTabView(viewModel: viewModel)
+                .tabItem {
+                    Label("Photos", systemImage: "photo.on.rectangle")
+                }
+                .tag(AppTab.photos)
+
+            Model3DTabView(
+                modelURL: viewModel.outputURL,
+                instanceID: modelPreviewInstanceID,
+                onSaveModel: presentSavePanel(for:)
+            )
+                .tabItem {
+                    Label("3D", systemImage: "cube")
+                }
+                .tag(AppTab.model3D)
+                .disabled(!viewModel.hasGeneratedModel)
+        }
+        .onChange(of: viewModel.state) { _, newState in
+            guard case .completed = newState else { return }
+            selectedTab = .model3D
+        }
+        .onChange(of: viewModel.hasGeneratedModel) { _, hasGeneratedModel in
+            if !hasGeneratedModel && selectedTab == .model3D {
+                selectedTab = .photos
+            }
+        }
+        .onChange(of: selectedTab) { _, newTab in
+            if newTab == .model3D && !viewModel.hasGeneratedModel {
+                selectedTab = .photos
+            } else if newTab == .model3D {
+                modelPreviewInstanceID = UUID()
+            }
+        }
+    }
+
+    private func presentSavePanel(for outputURL: URL) {
+        let panel = NSSavePanel()
+        if let usdzType = UTType(filenameExtension: "usdz") {
+            panel.allowedContentTypes = [usdzType]
+        }
+        panel.canCreateDirectories = true
+        panel.nameFieldStringValue = "Model.usdz"
+        panel.directoryURL = outputURL.deletingLastPathComponent()
+
+        guard panel.runModal() == .OK, let destinationURL = panel.url else {
+            return
+        }
+
+        do {
+            try viewModel.saveGeneratedModel(to: destinationURL)
+        } catch {
+            viewModel.state = .failed(message: "Unable to save model: \(error.localizedDescription)")
+        }
+    }
+}
+
+private enum AppTab: Hashable {
+    case photos
+    case model3D
+}
+
+private struct PhotosTabView: View {
+    @ObservedObject var viewModel: PhotogrammetryViewModel
 
     private let supportedContentTypes: [UTType] = [
         .jpeg,
@@ -125,8 +193,10 @@ struct ContentView: View {
 
         return VStack(alignment: .leading, spacing: 8) {
             HStack(spacing: 8) {
-                Image(systemName: presentation.symbolName)
-                    .foregroundStyle(color(for: presentation.tone))
+                if let symbolName = presentation.symbolName {
+                    Image(systemName: symbolName)
+                        .foregroundStyle(color(for: presentation.tone))
+                }
 
                 Text(presentation.title)
                     .font(.headline)
@@ -167,7 +237,7 @@ struct ContentView: View {
                     Button {
                         viewModel.generateModel()
                     } label: {
-                        Label("Generate", systemImage: "sparkles")
+                        Text("Generate")
                     }
                     .keyboardShortcut(.defaultAction)
                     .disabled(!viewModel.canGenerateModel)
@@ -176,51 +246,11 @@ struct ContentView: View {
                     .accessibilityHint("Run Apple Object Capture with selected images")
                 }
 
-                if let outputURL = viewModel.outputURL {
-                    Button {
-                        NSWorkspace.shared.open(outputURL)
-                    } label: {
-                        Label("Open", systemImage: "arrow.up.forward.app")
-                    }
-                    .help("Open the generated USDZ model")
-                    .accessibilityLabel("Open Model")
-                    .accessibilityHint("Open the generated USDZ file in Finder or default app")
-
-                    Button {
-                        presentSavePanel(for: outputURL)
-                    } label: {
-                        Label("Save…", systemImage: "square.and.arrow.down")
-                    }
-                    .disabled(!viewModel.canSaveGeneratedModel)
-                    .help("Save the generated model with a custom name")
-                    .accessibilityLabel("Save Model")
-                    .accessibilityHint("Choose where to save the generated USDZ model")
-                }
             }
         }
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Processing Status")
         .accessibilityValue(presentation.title)
-    }
-
-    private func presentSavePanel(for outputURL: URL) {
-        let panel = NSSavePanel()
-        if let usdzType = UTType(filenameExtension: "usdz") {
-            panel.allowedContentTypes = [usdzType]
-        }
-        panel.canCreateDirectories = true
-        panel.nameFieldStringValue = "Model.usdz"
-        panel.directoryURL = outputURL.deletingLastPathComponent()
-
-        guard panel.runModal() == .OK, let destinationURL = panel.url else {
-            return
-        }
-
-        do {
-            try viewModel.saveGeneratedModel(to: destinationURL)
-        } catch {
-            viewModel.state = .failed(message: "Unable to save model: \(error.localizedDescription)")
-        }
     }
 
     private func color(for tone: StatusPresentation.Tone) -> Color {

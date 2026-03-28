@@ -56,7 +56,7 @@ enum ProcessingState: Equatable {
             return StatusPresentation(
                 title: "Generating model",
                 detail: nil,
-                symbolName: "gearshape.2",
+                symbolName: nil,
                 tone: .secondary,
                 progress: progress,
                 progressText: "\(Int(progress * 100))%"
@@ -98,7 +98,7 @@ struct StatusPresentation: Equatable {
 
     let title: String
     let detail: String?
-    let symbolName: String
+    let symbolName: String?
     let tone: Tone
     let progress: Double?
     let progressText: String?
@@ -106,7 +106,7 @@ struct StatusPresentation: Equatable {
     init(
         title: String,
         detail: String?,
-        symbolName: String,
+        symbolName: String?,
         tone: Tone,
         progress: Double?,
         progressText: String? = nil

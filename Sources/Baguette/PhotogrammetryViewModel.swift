@@ -118,6 +118,10 @@ final class PhotogrammetryViewModel: ObservableObject {
         outputURL != nil
     }
 
+    var hasGeneratedModel: Bool {
+        outputURL != nil
+    }
+
     func handleDroppedItems(_ providers: [NSItemProvider]) -> Bool {
         guard !providers.isEmpty else { return false }
 
