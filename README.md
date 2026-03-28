@@ -24,7 +24,7 @@ This separation keeps the Object Capture workflow isolated from SwiftUI state up
 
 ## Prerequisites
 
-- macOS 13+.
+- macOS 26 (Tahoe).
 - Machine compatible with `PhotogrammetrySession` (Apple Object Capture).
 
 ## Run
