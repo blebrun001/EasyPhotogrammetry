@@ -14,15 +14,15 @@ enum ModelQuality: String, CaseIterable, Identifiable {
     var label: String {
         switch self {
         case .preview:
-            return "Aperçu (rapide)"
+            return "Preview (fast)"
         case .reduced:
-            return "Réduite"
+            return "Reduced"
         case .medium:
-            return "Moyenne"
+            return "Medium"
         case .full:
-            return "Élevée"
+            return "High"
         case .raw:
-            return "Brute (max)"
+            return "Raw (max)"
         }
     }
 
@@ -71,7 +71,7 @@ final class PhotogrammetryViewModel: ObservableObject {
         self.service = service
 
         if !PhotogrammetrySession.isSupported {
-            state = .failed(message: "Cette machine n'est pas compatible avec la photogrammétrie Apple.")
+            state = .failed(message: "This machine is not compatible with Apple photogrammetry.")
         }
     }
 
@@ -87,7 +87,7 @@ final class PhotogrammetryViewModel: ObservableObject {
     }
 
     var imageCountText: String {
-        "\(droppedImageURLs.count) photo(s) sélectionnée(s)"
+        "\(droppedImageURLs.count) selected photo(s)"
     }
 
     var compactImageCountText: String {
@@ -116,7 +116,7 @@ final class PhotogrammetryViewModel: ObservableObject {
             }
 
             if accepted.isEmpty {
-                state = .failed(message: "Aucune image valide détectée (\(SupportedImageFormat.userFacingList)).")
+                state = .failed(message: "No valid images detected (\(SupportedImageFormat.userFacingList)).")
                 return
             }
 

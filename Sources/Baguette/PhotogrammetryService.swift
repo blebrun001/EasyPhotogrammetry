@@ -19,11 +19,11 @@ enum PhotogrammetryServiceError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .unsupportedDevice:
-            return "Cette machine ne prend pas en charge PhotogrammetrySession."
+            return "This machine does not support PhotogrammetrySession."
         case .noValidImages:
-            return "Aucune image valide à traiter."
+            return "No valid images to process."
         case .outputNotFound(let url):
-            return "Le modèle USDZ n'a pas été généré: \(url.path)."
+            return "The USDZ model was not generated: \(url.path)."
         }
     }
 }

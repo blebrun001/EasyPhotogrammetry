@@ -1,43 +1,44 @@
 # Baguette
 
-Application macOS (SwiftUI + RealityKit) pour générer un modèle 3D `.usdz` à partir d'un lot d'images via Apple Object Capture.
+macOS application (SwiftUI + RealityKit) that generates a 3D `.usdz` model from a batch of images using Apple Object Capture.
 
-## Objectif
+## Features
 
-Fournir un point de départ simple, lisible et maintenable pour un workflow de photogrammétrie local:
-
-- import par glisser-déposer;
-- validation explicite des formats supportés;
-- génération asynchrone avec suivi de progression;
-- accès direct au fichier de sortie.
+- Drag and drop image files into the app.
+- Supported formats: `jpg`, `jpeg`, `png`, `heic`, `tiff`, `tif`.
+- Inline thumbnail preview of dropped images.
+- Quality selection before generation: `Preview`, `Reduced`, `Medium`, `Full`, `Raw`.
+- Asynchronous generation with progress updates.
+- One-click opening of the generated `.usdz` file.
+- User-facing error messages for unsupported devices and invalid input.
 
 ## Architecture
 
-- `ContentView`: interface utilisateur (drop zone, actions, état affiché).
-- `PhotogrammetryViewModel`: orchestration de l'état UI et des actions utilisateur.
-- `PhotogrammetryServicing` / `PhotogrammetryService`: couche de service isolant RealityKit.
-- `ProcessingState`: état métier de haut niveau (`idle`, `ready`, `processing`, `completed`, `failed`).
-- `SupportedImageFormat`: source unique de vérité pour les extensions supportées.
+- `ContentView`: user interface (drop zone, actions, displayed state).
+- `PhotogrammetryViewModel`: orchestration of UI state and user actions.
+- `PhotogrammetryServicing` / `PhotogrammetryService`: service layer isolating RealityKit.
+- `ProcessingState`: high-level domain state (`idle`, `ready`, `processing`, `completed`, `failed`).
+- `SupportedImageFormat`: single source of truth for supported extensions.
 
-Cette séparation évite le couplage UI / API système et facilite les évolutions futures (tests, options de détail, persistance).
+This separation keeps the Object Capture workflow isolated from SwiftUI state updates and makes future evolution easier.
 
-## Prérequis
+## Prerequisites
 
 - macOS 13+.
-- Machine compatible avec `PhotogrammetrySession` (Apple Object Capture).
+- Machine compatible with `PhotogrammetrySession` (Apple Object Capture).
 
-## Exécution
+## Run
 
 ```bash
 swift run
 ```
 
-## Génération d'un `.app` (CLI + Xcode UI)
+## Build a `.app` (CLI + Xcode UI)
 
-Le package SwiftPM reste la voie la plus simple pour le développement rapide (`swift run`).
-Pour produire un vrai bundle macOS `Baguette.app`, utiliser le projet Xcode `Baguette.xcodeproj`.
+The SwiftPM package remains the simplest path for fast development (`swift run`).
+To produce a real macOS `Baguette.app` bundle, use the Xcode project `Baguette.xcodeproj`.
 
-### Build CLI
+### CLI build
 
 ```bash
 xcodebuild -project Baguette.xcodeproj \
@@ -47,13 +48,13 @@ xcodebuild -project Baguette.xcodeproj \
   build
 ```
 
-Le `.app` est ensuite disponible dans le dossier DerivedData, par exemple:
+The `.app` is then available in the DerivedData directory, for example:
 
 ```text
 ~/Library/Developer/Xcode/DerivedData/.../Build/Products/Debug/Baguette.app
 ```
 
-### Build CLI avec chemin de sortie maîtrisé
+### CLI build with controlled output path
 
 ```bash
 xcodebuild -project Baguette.xcodeproj \
@@ -64,40 +65,33 @@ xcodebuild -project Baguette.xcodeproj \
   build
 ```
 
-Chemin de sortie correspondant:
+Matching output path:
 
 ```text
 ~/Library/Developer/Xcode/DerivedData/BaguetteLocal/Build/Products/Debug/Baguette.app
 ```
 
-### Lancer l'app générée
+### Launch the generated app
 
 ```bash
 open ~/Library/Developer/Xcode/DerivedData/BaguetteLocal/Build/Products/Debug/Baguette.app
 ```
 
-### Signature
+### Signing
 
-Le target Xcode est configuré pour une signature locale de développement (`CODE_SIGN_STYLE = Automatic`), adaptée au build/test local.
+The Xcode target is configured for local development signing (`CODE_SIGN_STYLE = Automatic`), suitable for local build/test.
 
-## Icône d'application
+## App icon
 
-L'icône Dock est fournie par `Assets.xcassets/AppIcon.appiconset` (asset catalog), utilisé par le target Xcode.
-Pour régénérer les rendus PNG + le fallback `.icns`:
+The Dock icon is provided by `Assets.xcassets/AppIcon.appiconset` (asset catalog), used by the Xcode target.
+To regenerate PNG renders and the `.icns` fallback:
 
 ```bash
 ./Scripts/generate_app_icon.sh
 ```
 
-## Choix de qualité pour éviter le "vibe coding"
+## Current limitations
 
-- comportements critiques explicités et centralisés (validation formats, progression bornée);
-- pas de logique dupliquée entre UI et service;
-- erreurs métier dédiées et messages lisibles;
-- conventions simples et stables pour limiter les régressions.
-
-## Limites actuelles
-
-- sortie `.usdz` générée dans un répertoire temporaire;
-- niveau de détail fixé à `.full`;
-- pas encore de suite de tests automatisés.
+- `.usdz` output is generated in a temporary directory;
+- each new generation creates a new temporary input/output workspace;
+- no automated test suite yet.

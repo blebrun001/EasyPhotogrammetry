@@ -10,13 +10,13 @@ enum ProcessingState: Equatable {
     var statusText: String {
         switch self {
         case .idle:
-            return "Glissez des photos pour commencer"
+            return "Drop photos to start"
         case .ready:
-            return "Prêt à générer le modèle"
+            return "Ready to generate the model"
         case .processing:
-            return "Traitement en cours..."
+            return "Processing..."
         case .completed:
-            return "Modèle généré"
+            return "Model generated"
         case .failed(let message):
             return message
         }
