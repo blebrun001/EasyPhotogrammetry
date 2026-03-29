@@ -67,18 +67,29 @@ final class PhotogrammetryViewModel: ObservableObject {
     @Published var isImportPickerPresented = false
 
     private let service: PhotogrammetryServicing
+    private let isPhotogrammetrySupported: () -> Bool
+    private let fileManager: FileManaging
+    private let itemProviderLoader: ItemProviderLoading
     private var generationTask: Task<Void, Never>?
 
-    init(service: PhotogrammetryServicing) {
+    init(
+        service: PhotogrammetryServicing,
+        isPhotogrammetrySupported: @escaping () -> Bool = { PhotogrammetrySession.isSupported },
+        fileManager: FileManaging = FileManager.default,
+        itemProviderLoader: ItemProviderLoading = DefaultItemProviderLoader()
+    ) {
         self.service = service
+        self.isPhotogrammetrySupported = isPhotogrammetrySupported
+        self.fileManager = fileManager
+        self.itemProviderLoader = itemProviderLoader
 
-        if !PhotogrammetrySession.isSupported {
+        if !isPhotogrammetrySupported() {
             state = .failed(message: "This machine is not compatible with Apple photogrammetry.")
         }
     }
 
     var canGenerateModel: Bool {
-        guard PhotogrammetrySession.isSupported else { return false }
+        guard isPhotogrammetrySupported() else { return false }
         guard !droppedImageURLs.isEmpty else { return false }
 
         if case .processing = state {
@@ -96,7 +107,7 @@ final class PhotogrammetryViewModel: ObservableObject {
     }
 
     var canImportImages: Bool {
-        guard PhotogrammetrySession.isSupported else { return false }
+        guard isPhotogrammetrySupported() else { return false }
         if case .processing = state {
             return false
         }
@@ -129,12 +140,12 @@ final class PhotogrammetryViewModel: ObservableObject {
             var accepted: [URL] = []
 
             for provider in providers {
-                guard provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) else {
+                guard itemProviderLoader.hasFileURL(provider) else {
                     continue
                 }
 
                 do {
-                    let url = try await provider.loadFileURL()
+                    let url = try await itemProviderLoader.loadFileURL(from: provider)
                     if SupportedImageFormat.isSupported(url) {
                         accepted.append(url)
                     }
@@ -197,7 +208,6 @@ final class PhotogrammetryViewModel: ObservableObject {
             finalDestination = destinationURL
         }
 
-        let fileManager = FileManager.default
         if fileManager.fileExists(atPath: finalDestination.path) {
             try fileManager.removeItem(at: finalDestination)
         }
@@ -276,10 +286,28 @@ enum ImportBehavior {
     case replace
 }
 
-private extension NSItemProvider {
-    func loadFileURL() async throws -> URL {
+protocol FileManaging {
+    func fileExists(atPath path: String) -> Bool
+    func removeItem(at URL: URL) throws
+    func copyItem(at srcURL: URL, to dstURL: URL) throws
+}
+
+extension FileManager: FileManaging {}
+
+protocol ItemProviderLoading {
+    func hasFileURL(_ provider: NSItemProvider) -> Bool
+    @MainActor func loadFileURL(from provider: NSItemProvider) async throws -> URL
+}
+
+struct DefaultItemProviderLoader: ItemProviderLoading {
+    func hasFileURL(_ provider: NSItemProvider) -> Bool {
+        provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier)
+    }
+
+    @MainActor
+    func loadFileURL(from provider: NSItemProvider) async throws -> URL {
         try await withCheckedThrowingContinuation { continuation in
-            loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, error in
+            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, error in
                 if let error {
                     continuation.resume(throwing: error)
                     return

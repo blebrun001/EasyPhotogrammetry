@@ -33,6 +33,18 @@ This separation keeps the Object Capture workflow isolated from SwiftUI state up
 swift run
 ```
 
+## Testing
+
+```bash
+swift test
+```
+
+Or use:
+
+```bash
+./Scripts/test.sh
+```
+
 ## Build a `.app` (CLI + Xcode UI)
 
 The SwiftPM package remains the simplest path for fast development (`swift run`).

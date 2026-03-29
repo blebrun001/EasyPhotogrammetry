@@ -13,5 +13,9 @@ let package = Package(
                 .process("Resources"),
             ]
         ),
+        .testTarget(
+            name: "BaguetteTests",
+            dependencies: ["Baguette"]
+        ),
     ]
 )

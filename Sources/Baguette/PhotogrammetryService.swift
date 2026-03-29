@@ -11,7 +11,14 @@ protocol PhotogrammetryServicing: Sendable {
     ) async throws -> URL
 }
 
-enum PhotogrammetryServiceError: LocalizedError {
+typealias PhotogrammetrySessionRunner = @Sendable (
+    _ inputDirectory: URL,
+    _ outputURL: URL,
+    _ detail: PhotogrammetrySession.Request.Detail,
+    _ onProgress: @escaping @Sendable (Double) -> Void
+) async throws -> Void
+
+enum PhotogrammetryServiceError: LocalizedError, Equatable {
     case unsupportedDevice
     case noValidImages
     case outputNotFound(URL)
@@ -31,9 +38,20 @@ enum PhotogrammetryServiceError: LocalizedError {
 /// Concrete RealityKit-backed implementation for Apple Object Capture.
 final class PhotogrammetryService: PhotogrammetryServicing, @unchecked Sendable {
     private let temporaryStore: TemporaryGenerationStore
+    private let isPhotogrammetrySupported: @Sendable () -> Bool
+    private let sessionRunner: PhotogrammetrySessionRunner
+    private let fileManager: FileManager
 
-    init(temporaryStore: TemporaryGenerationStore = .shared) {
+    init(
+        temporaryStore: TemporaryGenerationStore = .shared,
+        isPhotogrammetrySupported: @escaping @Sendable () -> Bool = { PhotogrammetrySession.isSupported },
+        sessionRunner: @escaping PhotogrammetrySessionRunner = PhotogrammetryService.runRealityKitSession,
+        fileManager: FileManager = .default
+    ) {
         self.temporaryStore = temporaryStore
+        self.isPhotogrammetrySupported = isPhotogrammetrySupported
+        self.sessionRunner = sessionRunner
+        self.fileManager = fileManager
     }
 
     func generateUSDZ(from imageURLs: [URL], detail: PhotogrammetrySession.Request.Detail) async throws -> URL {
@@ -45,7 +63,7 @@ final class PhotogrammetryService: PhotogrammetryServicing, @unchecked Sendable 
         detail: PhotogrammetrySession.Request.Detail,
         onProgress: @escaping @Sendable (Double) -> Void
     ) async throws -> URL {
-        guard PhotogrammetrySession.isSupported else {
+        guard isPhotogrammetrySupported() else {
             throw PhotogrammetryServiceError.unsupportedDevice
         }
 
@@ -54,26 +72,41 @@ final class PhotogrammetryService: PhotogrammetryServicing, @unchecked Sendable 
             throw PhotogrammetryServiceError.noValidImages
         }
 
-        let fm = FileManager.default
         let workspace = try temporaryStore.createWorkspace()
         let inputDirectory = workspace.inputDirectory
         let outputURL = workspace.outputModelURL
 
         for imageURL in validImages {
             let destination = inputDirectory.appendingPathComponent(imageURL.lastPathComponent)
-            if fm.fileExists(atPath: destination.path) {
+            if fileManager.fileExists(atPath: destination.path) {
                 let deduplicatedName = "\(UUID().uuidString)_\(imageURL.lastPathComponent)"
-                try fm.copyItem(at: imageURL, to: inputDirectory.appendingPathComponent(deduplicatedName))
+                try fileManager.copyItem(at: imageURL, to: inputDirectory.appendingPathComponent(deduplicatedName))
             } else {
-                try fm.copyItem(at: imageURL, to: destination)
+                try fileManager.copyItem(at: imageURL, to: destination)
             }
         }
 
+        defer { temporaryStore.removeInputDirectoryIfPresent(at: inputDirectory) }
+
+        try await sessionRunner(inputDirectory, outputURL, detail, onProgress)
+
+        guard fileManager.fileExists(atPath: outputURL.path) else {
+            throw PhotogrammetryServiceError.outputNotFound(outputURL)
+        }
+
+        return outputURL
+    }
+
+    private static func runRealityKitSession(
+        inputDirectory: URL,
+        outputURL: URL,
+        detail: PhotogrammetrySession.Request.Detail,
+        onProgress: @escaping @Sendable (Double) -> Void
+    ) async throws {
         let config = PhotogrammetrySession.Configuration()
         let session = try PhotogrammetrySession(input: inputDirectory, configuration: config)
-        return try await withTaskCancellationHandler {
-            defer { temporaryStore.removeInputDirectoryIfPresent(at: inputDirectory) }
 
+        try await withTaskCancellationHandler {
             try Task.checkCancellation()
 
             let request = PhotogrammetrySession.Request.modelFile(url: outputURL, detail: detail)
@@ -88,22 +121,13 @@ final class PhotogrammetryService: PhotogrammetryServicing, @unchecked Sendable 
                 case .requestError(_, let error):
                     throw error
                 case .processingComplete:
-                    guard fm.fileExists(atPath: outputURL.path) else {
-                        throw PhotogrammetryServiceError.outputNotFound(outputURL)
-                    }
-                    return outputURL
+                    return
                 default:
                     break
                 }
             }
 
             try Task.checkCancellation()
-
-            guard fm.fileExists(atPath: outputURL.path) else {
-                throw PhotogrammetryServiceError.outputNotFound(outputURL)
-            }
-
-            return outputURL
         } onCancel: {
             session.cancel()
         }
@@ -119,14 +143,20 @@ final class TemporaryGenerationStore: @unchecked Sendable {
         let outputModelURL: URL
     }
 
-    private let fileManager = FileManager.default
+    private let fileManager: FileManager
     private let lock = NSLock()
     private let rootDirectory: URL
 
-    private init() {
-        rootDirectory = fileManager.temporaryDirectory
+    init(rootDirectory: URL? = nil, fileManager: FileManager = .default, cleanOnInit: Bool = true) {
+        self.fileManager = fileManager
+        self.rootDirectory = rootDirectory ?? fileManager.temporaryDirectory
             .appendingPathComponent("Baguette_Generated_Models", isDirectory: true)
 
+        guard cleanOnInit else { return }
+        prepareRootDirectory()
+    }
+
+    private func prepareRootDirectory() {
         do {
             if fileManager.fileExists(atPath: rootDirectory.path) {
                 try fileManager.removeItem(at: rootDirectory)
