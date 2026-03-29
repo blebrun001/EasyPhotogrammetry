@@ -293,7 +293,7 @@ private struct ThumbnailView: View {
         }
         .frame(width: 72, height: 72)
         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
-        .task(id: imageURL) {
+        .task(id: imageURL, priority: .utility) {
             await loadThumbnailIfNeeded()
         }
         .accessibilityLabel(imageURL.lastPathComponent)
@@ -305,7 +305,7 @@ private struct ThumbnailView: View {
         isLoading = true
 
         let loaded = await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .userInitiated).async {
+            DispatchQueue.global(qos: .utility).async {
                 continuation.resume(returning: Self.makeThumbnail(from: imageURL, maxPixelSize: 200))
             }
         }
