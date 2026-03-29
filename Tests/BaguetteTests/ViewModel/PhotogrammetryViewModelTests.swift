@@ -98,6 +98,7 @@ struct PhotogrammetryViewModelTests {
             return false
         })
         #expect(viewModel.outputURL == outputURL)
+        #expect(viewModel.selectedScaleFileURL == outputURL)
     }
 
     @Test("generation error transitions to failed")
@@ -167,6 +168,111 @@ struct PhotogrammetryViewModelTests {
         #expect(fakeFileManager.copies[0].destination == destinationWithoutExtension.appendingPathExtension("usdz"))
     }
 
+    @Test("scaleModel success updates output and message")
+    @MainActor
+    func scaleSuccess() {
+        let inputURL = URL(fileURLWithPath: "/tmp/source.usdz")
+        let outputURL = URL(fileURLWithPath: "/tmp/scaled_source.usdz")
+        let scalingUseCase = StubScalingUseCase { request in
+            #expect(request.file == inputURL)
+            #expect(request.uncalibrated == 10)
+            #expect(request.real == 25)
+            #expect(request.overwrite == false)
+            return outputURL
+        }
+        let viewModel = PhotogrammetryViewModel(
+            service: StubPhotogrammetryService { _, _, _ in URL(fileURLWithPath: "/tmp/model.usdz") },
+            scalingUseCase: scalingUseCase,
+            isPhotogrammetrySupported: { true }
+        )
+        viewModel.selectedScaleFileURL = inputURL
+        viewModel.uncalibratedMeasurement = "10"
+        viewModel.realMeasurement = "25"
+        viewModel.overwriteScaledModel = false
+
+        viewModel.scaleModel()
+
+        #expect(viewModel.outputURL == outputURL)
+        #expect(viewModel.selectedScaleFileURL == outputURL)
+        #expect(viewModel.scalingResultMessage.contains("Scaled model"))
+        #expect(viewModel.isScaling == false)
+    }
+
+    @Test("scaleModel failure reports error")
+    @MainActor
+    func scaleFailure() {
+        let scalingUseCase = StubScalingUseCase { _ in
+            throw ViewModelTestError.expectedFailure
+        }
+        let viewModel = PhotogrammetryViewModel(
+            service: StubPhotogrammetryService { _, _, _ in URL(fileURLWithPath: "/tmp/model.usdz") },
+            scalingUseCase: scalingUseCase,
+            isPhotogrammetrySupported: { true }
+        )
+        viewModel.selectedScaleFileURL = URL(fileURLWithPath: "/tmp/source.usdz")
+        viewModel.uncalibratedMeasurement = "10"
+        viewModel.realMeasurement = "20"
+
+        viewModel.scaleModel()
+
+        #expect(viewModel.scalingResultMessage.contains("Scaling error"))
+        #expect(viewModel.isScaling == false)
+    }
+
+    @Test("applyMeasuredUncalibratedDistance writes formatted value")
+    @MainActor
+    func applyMeasuredDistance() {
+        let viewModel = PhotogrammetryViewModel(
+            service: StubPhotogrammetryService { _, _, _ in URL(fileURLWithPath: "/tmp/model.usdz") },
+            isPhotogrammetrySupported: { true }
+        )
+
+        viewModel.applyMeasuredUncalibratedDistance(0.123456789)
+
+        #expect(viewModel.uncalibratedMeasurement == "0.123457")
+    }
+
+    @Test("handleMeasurementUpdate updates measurement state and value")
+    @MainActor
+    func handleMeasurementUpdate() {
+        let viewModel = PhotogrammetryViewModel(
+            service: StubPhotogrammetryService { _, _, _ in URL(fileURLWithPath: "/tmp/model.usdz") },
+            isPhotogrammetrySupported: { true }
+        )
+
+        let update = MeasurementUpdate(
+            pointCount: 2,
+            distance: 1.25,
+            phase: .done
+        )
+        viewModel.handleMeasurementUpdate(update)
+
+        #expect(viewModel.measurementPhase == .done)
+        #expect(viewModel.uncalibratedMeasurement == "1.250000")
+    }
+
+    @Test("changing selectedScaleFileURL resets measurement state")
+    @MainActor
+    func selectedScaleFileReset() {
+        let viewModel = PhotogrammetryViewModel(
+            service: StubPhotogrammetryService { _, _, _ in URL(fileURLWithPath: "/tmp/model.usdz") },
+            isPhotogrammetrySupported: { true }
+        )
+
+        viewModel.uncalibratedMeasurement = "2.0"
+        viewModel.handleMeasurementUpdate(
+            MeasurementUpdate(
+                pointCount: 1,
+                distance: nil,
+                phase: .pickPoint2
+            )
+        )
+        viewModel.selectedScaleFileURL = URL(fileURLWithPath: "/tmp/another.usdz")
+
+        #expect(viewModel.measurementPhase == .idle)
+        #expect(viewModel.uncalibratedMeasurement.isEmpty)
+    }
+
     @MainActor
     private func makeViewModel() -> PhotogrammetryViewModel {
         PhotogrammetryViewModel(
@@ -215,6 +321,32 @@ private struct StubPhotogrammetryService: PhotogrammetryServicing {
         onProgress: @escaping @Sendable (Double) -> Void
     ) async throws -> URL {
         try await handler(imageURLs, detail, onProgress)
+    }
+}
+
+private struct StubScalingUseCase: ScalingUseCase {
+    let scaleHandler: (ScalingRequest) throws -> URL
+
+    func makeRequest(file: URL?, uncalibrated: String, real: String, overwrite: Bool) throws -> ScalingRequest {
+        guard let file else {
+            throw ScalingError.invalidInput("Missing file")
+        }
+
+        guard let uncalibratedValue = Double(uncalibrated),
+              let realValue = Double(real) else {
+            throw ScalingError.invalidInput("Invalid values")
+        }
+
+        return ScalingRequest(
+            file: file,
+            uncalibrated: uncalibratedValue,
+            real: realValue,
+            overwrite: overwrite
+        )
+    }
+
+    func execute(_ request: ScalingRequest) throws -> URL {
+        try scaleHandler(request)
     }
 }
 

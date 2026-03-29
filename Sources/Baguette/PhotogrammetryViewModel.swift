@@ -65,20 +65,37 @@ final class PhotogrammetryViewModel: ObservableObject {
     @Published var isDropTargeted = false
     @Published var selectedQuality: ModelQuality = .full
     @Published var isImportPickerPresented = false
+    @Published var selectedScaleFileURL: URL? {
+        didSet {
+            guard selectedScaleFileURL != oldValue else { return }
+            resetMeasurementState(clearUncalibrated: true)
+        }
+    }
+    @Published var uncalibratedMeasurement: String = ""
+    @Published var realMeasurement: String = ""
+    @Published var overwriteScaledModel: Bool = true
+    @Published var scalingResultMessage: String = ""
+    @Published private(set) var isScaling = false
+    @Published private(set) var measurementPhase: MeasurementPhase = .idle
 
     private let service: PhotogrammetryServicing
+    private let scalingUseCase: ScalingUseCase
     private let isPhotogrammetrySupported: () -> Bool
     private let fileManager: FileManaging
     private let itemProviderLoader: ItemProviderLoading
     private var generationTask: Task<Void, Never>?
+    private var generatedModelURL: URL?
+    private var scaledModelURL: URL?
 
     init(
         service: PhotogrammetryServicing,
+        scalingUseCase: ScalingUseCase = DefaultScalingUseCase(),
         isPhotogrammetrySupported: @escaping () -> Bool = { PhotogrammetrySession.isSupported },
         fileManager: FileManaging = FileManager.default,
         itemProviderLoader: ItemProviderLoading = DefaultItemProviderLoader()
     ) {
         self.service = service
+        self.scalingUseCase = scalingUseCase
         self.isPhotogrammetrySupported = isPhotogrammetrySupported
         self.fileManager = fileManager
         self.itemProviderLoader = itemProviderLoader
@@ -119,6 +136,12 @@ final class PhotogrammetryViewModel: ObservableObject {
     }
 
     var outputURL: URL? {
+        if let scaledModelURL {
+            return scaledModelURL
+        }
+        if let generatedModelURL {
+            return generatedModelURL
+        }
         if case .completed(let url) = state {
             return url
         }
@@ -131,6 +154,14 @@ final class PhotogrammetryViewModel: ObservableObject {
 
     var hasGeneratedModel: Bool {
         outputURL != nil
+    }
+
+    var canScaleModel: Bool {
+        guard !isScaling else { return false }
+        guard selectedScaleFileURL != nil else { return false }
+        guard let realValue = Double(realMeasurement), realValue > 0 else { return false }
+        guard let uncalibratedValue = Double(uncalibratedMeasurement), uncalibratedValue > 0 else { return false }
+        return true
     }
 
     func handleDroppedItems(_ providers: [NSItemProvider]) -> Bool {
@@ -180,6 +211,8 @@ final class PhotogrammetryViewModel: ObservableObject {
         generationTask?.cancel()
         generationTask = nil
         droppedImageURLs = []
+        generatedModelURL = nil
+        scaledModelURL = nil
         state = .idle
     }
 
@@ -214,6 +247,45 @@ final class PhotogrammetryViewModel: ObservableObject {
         try fileManager.copyItem(at: sourceURL, to: finalDestination)
     }
 
+    func scaleModel() {
+        isScaling = true
+        defer { isScaling = false }
+
+        do {
+            let request = try scalingUseCase.makeRequest(
+                file: selectedScaleFileURL,
+                uncalibrated: uncalibratedMeasurement,
+                real: realMeasurement,
+                overwrite: overwriteScaledModel
+            )
+            let resultURL = try scalingUseCase.execute(request)
+            scaledModelURL = resultURL
+            selectedScaleFileURL = resultURL
+            scalingResultMessage = "Scaled model: \(resultURL.lastPathComponent)"
+        } catch {
+            scalingResultMessage = "Scaling error: \(error.localizedDescription)"
+        }
+    }
+
+    func applyMeasuredUncalibratedDistance(_ distance: Double) {
+        guard distance.isFinite, distance > 0 else { return }
+        uncalibratedMeasurement = String(format: "%.6f", distance)
+    }
+
+    func handleMeasurementUpdate(_ update: MeasurementUpdate) {
+        measurementPhase = update.phase
+
+        guard let distance = update.distance else { return }
+        applyMeasuredUncalibratedDistance(distance)
+    }
+
+    func resetMeasurementState(clearUncalibrated: Bool) {
+        measurementPhase = .idle
+        if clearUncalibrated {
+            uncalibratedMeasurement = ""
+        }
+    }
+
     private func runGeneration() async {
         guard !Task.isCancelled else { return }
 
@@ -236,6 +308,11 @@ final class PhotogrammetryViewModel: ObservableObject {
                 generationTask = nil
                 return
             }
+            generatedModelURL = outputURL
+            scaledModelURL = nil
+            selectedScaleFileURL = outputURL
+            scalingResultMessage = ""
+            resetMeasurementState(clearUncalibrated: true)
             state = .completed(url: outputURL)
         } catch is CancellationError {
             state = .cancelled
@@ -266,6 +343,9 @@ final class PhotogrammetryViewModel: ObservableObject {
         }
 
         droppedImageURLs = Self.uniquePreservingOrder(merged)
+        generatedModelURL = nil
+        scaledModelURL = nil
+        resetMeasurementState(clearUncalibrated: true)
         state = .ready
     }
 

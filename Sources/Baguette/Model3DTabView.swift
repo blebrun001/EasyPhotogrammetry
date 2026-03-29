@@ -1,4 +1,4 @@
-import QuickLookUI
+import SceneKit
 import SwiftUI
 
 struct Model3DTabView: View {
@@ -9,7 +9,7 @@ struct Model3DTabView: View {
     var body: some View {
         VStack(spacing: 12) {
             ZStack {
-                QuickLookModelPreview(url: modelURL)
+                SceneKitModelPreview(url: modelURL)
                     .id(instanceID)
 
                 if modelURL == nil {
@@ -48,7 +48,7 @@ struct Model3DTabView: View {
     }
 }
 
-private struct QuickLookModelPreview: NSViewRepresentable {
+private struct SceneKitModelPreview: NSViewRepresentable {
     let url: URL?
 
     final class Coordinator {
@@ -59,33 +59,39 @@ private struct QuickLookModelPreview: NSViewRepresentable {
         Coordinator()
     }
 
-    func makeNSView(context: Context) -> QLPreviewView {
-        QLPreviewView(frame: .zero, style: .normal)
+    func makeNSView(context: Context) -> SCNView {
+        let view = SCNView(frame: .zero)
+        view.allowsCameraControl = true
+        view.autoenablesDefaultLighting = true
+        view.backgroundColor = .windowBackgroundColor
+        view.scene = SCNScene()
+        return view
     }
 
-    func updateNSView(_ nsView: QLPreviewView, context: Context) {
+    func updateNSView(_ nsView: SCNView, context: Context) {
+        guard context.coordinator.currentURL != url else { return }
+
+        context.coordinator.currentURL = url
+
         guard let url else {
-            context.coordinator.currentURL = nil
-            nsView.previewItem = nil
+            nsView.scene = SCNScene()
             return
         }
 
         guard FileManager.default.fileExists(atPath: url.path) else {
-            context.coordinator.currentURL = nil
-            nsView.previewItem = nil
+            nsView.scene = SCNScene()
             return
         }
 
-        let shouldUpdatePreviewItem = context.coordinator.currentURL != url || nsView.previewItem == nil
-        if shouldUpdatePreviewItem {
-            context.coordinator.currentURL = url
-            nsView.previewItem = url as NSURL
-            nsView.refreshPreviewItem()
+        do {
+            nsView.scene = try SCNScene(url: url, options: nil)
+        } catch {
+            nsView.scene = SCNScene()
         }
     }
 
-    static func dismantleNSView(_ nsView: QLPreviewView, coordinator: Coordinator) {
+    static func dismantleNSView(_ nsView: SCNView, coordinator: Coordinator) {
         coordinator.currentURL = nil
-        nsView.previewItem = nil
+        nsView.scene = nil
     }
 }
