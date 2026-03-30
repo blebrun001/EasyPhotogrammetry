@@ -1,4 +1,4 @@
-# Baguette
+# <img src="Sources/Baguette/Resources/Assets.xcassets/AppIcon.appiconset/icon_128x128.png" alt="Baguette icon" width="28" /> Baguette
 
 macOS application (SwiftUI + RealityKit) that generates a 3D `.usdz` model from a batch of images using Apple Object Capture.
 
