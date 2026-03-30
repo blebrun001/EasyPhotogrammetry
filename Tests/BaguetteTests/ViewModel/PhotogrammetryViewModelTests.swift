@@ -144,7 +144,7 @@ struct PhotogrammetryViewModelTests {
             return false
         })
         #expect(await waitUntilAsync { await tracker.generateCallCount() == 1 })
-        #expect(await tracker.generatedDetails() == [.full])
+        #expect(await tracker.generatedDetailRawValues() == [PhotogrammetrySession.Request.Detail.full.rawValue])
     }
 
     @Test("generate in high reuses prewarmed result without extra generation")
@@ -353,7 +353,10 @@ struct PhotogrammetryViewModelTests {
             return false
         })
         #expect(await tracker.generateCallCount() == 2)
-        #expect(await tracker.generatedDetails() == [.full, .medium])
+        #expect(await tracker.generatedDetailRawValues() == [
+            PhotogrammetrySession.Request.Detail.full.rawValue,
+            PhotogrammetrySession.Request.Detail.medium.rawValue,
+        ])
     }
 
     @Test("generation error transitions to failed")
@@ -678,12 +681,12 @@ private struct StubPhotogrammetryService: PhotogrammetryServicing {
 
 private actor ServiceTracker {
     private var generateCalls = 0
-    private var details: [PhotogrammetrySession.Request.Detail] = []
+    private var detailRawValues: [Int] = []
     private var cleaned: [URL] = []
 
     func recordGenerateCall(detail: PhotogrammetrySession.Request.Detail) {
         generateCalls += 1
-        details.append(detail)
+        detailRawValues.append(detail.rawValue)
     }
 
     func recordCleanupCall(url: URL) {
@@ -694,8 +697,8 @@ private actor ServiceTracker {
         generateCalls
     }
 
-    func generatedDetails() -> [PhotogrammetrySession.Request.Detail] {
-        details
+    func generatedDetailRawValues() -> [Int] {
+        detailRawValues
     }
 
     func cleanedURLs() -> [URL] {
