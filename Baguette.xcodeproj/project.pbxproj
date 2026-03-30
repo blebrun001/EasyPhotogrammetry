@@ -7,7 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		A10000010000000000000001 /* AppIconBootstrap.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000001 /* AppIconBootstrap.swift */; };
 		A10000010000000000000002 /* BaguetteApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000002 /* BaguetteApp.swift */; };
 		A10000010000000000000003 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000003 /* ContentView.swift */; };
 		A10000010000000000000004 /* PhotogrammetryService.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000004 /* PhotogrammetryService.swift */; };
@@ -25,7 +24,6 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		A20000010000000000000001 /* AppIconBootstrap.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppIconBootstrap.swift; sourceTree = "<group>"; };
 		A20000010000000000000002 /* BaguetteApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BaguetteApp.swift; sourceTree = "<group>"; };
 		A20000010000000000000003 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		A20000010000000000000004 /* PhotogrammetryService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotogrammetryService.swift; sourceTree = "<group>"; };
@@ -91,7 +89,6 @@
 		A40000010000000000000005 /* Baguette */ = {
 			isa = PBXGroup;
 			children = (
-				A20000010000000000000001 /* AppIconBootstrap.swift */,
 				A20000010000000000000002 /* BaguetteApp.swift */,
 				A20000010000000000000003 /* ContentView.swift */,
 				A20000010000000000000020 /* ImportPhotosTabView.swift */,
@@ -188,7 +185,6 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				A10000010000000000000001 /* AppIconBootstrap.swift in Sources */,
 				A10000010000000000000002 /* BaguetteApp.swift in Sources */,
 				A10000010000000000000003 /* ContentView.swift in Sources */,
 				A10000010000000000000020 /* ImportPhotosTabView.swift in Sources */,

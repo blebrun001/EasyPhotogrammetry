@@ -27,7 +27,7 @@ enum ScalingError: LocalizedError, Equatable {
 }
 
 protocol USDZScaling: Sendable {
-    func scaleUSDZ(file: URL, uncalibrated: Double, real: Double) throws -> URL
+    func scaleUSDZ(file: URL, uncalibrated: Double, real: Double, overwrite: Bool) throws -> URL
 }
 
 final class USDZScaler: USDZScaling, @unchecked Sendable {
@@ -37,7 +37,7 @@ final class USDZScaler: USDZScaling, @unchecked Sendable {
         self.fileManager = fileManager
     }
 
-    func scaleUSDZ(file: URL, uncalibrated: Double, real: Double) throws -> URL {
+    func scaleUSDZ(file: URL, uncalibrated: Double, real: Double, overwrite: Bool) throws -> URL {
         guard uncalibrated > 0, real > 0 else {
             throw ScalingError.invalidInput("Scaling values must be positive numbers.")
         }
@@ -52,9 +52,14 @@ final class USDZScaler: USDZScaling, @unchecked Sendable {
         }
 
         let factor = Float(real / uncalibrated)
-        let destinationURL = file
-            .deletingLastPathComponent()
-            .appendingPathComponent("scaled_\(file.lastPathComponent)")
+        let destinationURL: URL
+        if overwrite {
+            destinationURL = file
+        } else {
+            destinationURL = file
+                .deletingLastPathComponent()
+                .appendingPathComponent("scaled_\(file.lastPathComponent)")
+        }
 
         do {
             try scaleUsingModelIO(sourceURL: file, destinationURL: destinationURL, factor: factor)

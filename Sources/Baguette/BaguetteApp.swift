@@ -1,12 +1,6 @@
 import SwiftUI
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
-    func applicationDidFinishLaunching(_ notification: Notification) {
-        Task { @MainActor in
-            AppIconBootstrap.apply()
-        }
-    }
-
     func applicationWillTerminate(_ notification: Notification) {
         TemporaryGenerationStore.shared.cleanupAll()
     }

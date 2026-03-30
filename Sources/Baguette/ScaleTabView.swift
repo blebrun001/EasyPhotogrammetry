@@ -36,7 +36,7 @@ struct ScaleTabView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
 
-                TextField("Calibrated measure (cm)", text: $viewModel.realMeasurement)
+                TextField("real measurment (cm)", text: $viewModel.realMeasurement)
                     .textFieldStyle(.roundedBorder)
 
                 if !viewModel.scalingResultMessage.isEmpty {

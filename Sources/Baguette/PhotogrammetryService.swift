@@ -9,6 +9,7 @@ protocol PhotogrammetryServicing: Sendable {
         detail: PhotogrammetrySession.Request.Detail,
         onProgress: @escaping @Sendable (Double) -> Void
     ) async throws -> URL
+    func cleanupGeneratedModel(at outputURL: URL)
 }
 
 typealias PhotogrammetrySessionRunner = @Sendable (
@@ -99,6 +100,10 @@ final class PhotogrammetryService: PhotogrammetryServicing, @unchecked Sendable 
         }
 
         return outputURL
+    }
+
+    func cleanupGeneratedModel(at outputURL: URL) {
+        temporaryStore.removeWorkspace(containingOutputModelAt: outputURL)
     }
 
     private func stageImages(_ imageURLs: [URL], in inputDirectory: URL) async throws {
@@ -231,5 +236,26 @@ final class TemporaryGenerationStore: @unchecked Sendable {
         }
 
         try? fileManager.removeItem(at: rootDirectory)
+    }
+
+    func removeWorkspace(containingOutputModelAt outputModelURL: URL) {
+        lock.lock()
+        defer { lock.unlock() }
+
+        let sessionDirectory = outputModelURL
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .standardizedFileURL
+        let root = rootDirectory.standardizedFileURL
+
+        guard sessionDirectory.pathComponents.starts(with: root.pathComponents) else {
+            return
+        }
+
+        guard fileManager.fileExists(atPath: sessionDirectory.path) else {
+            return
+        }
+
+        try? fileManager.removeItem(at: sessionDirectory)
     }
 }

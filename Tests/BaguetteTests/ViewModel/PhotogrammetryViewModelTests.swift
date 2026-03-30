@@ -107,11 +107,10 @@ struct PhotogrammetryViewModelTests {
             if case .processing = viewModel.state { return true }
             return false
         })
-        if case .processing(let progress) = viewModel.state {
-            #expect(progress == 1)
-        } else {
-            Issue.record("Expected processing state before completion")
-        }
+        #expect(await waitUntil {
+            if case .processing(let progress) = viewModel.state { return progress == 1 }
+            return false
+        })
 
         #expect(await waitUntil {
             if case .completed = viewModel.state { return true }
@@ -121,6 +120,240 @@ struct PhotogrammetryViewModelTests {
         #expect(viewModel.selectedScaleFileURL == outputURL)
         #expect(viewModel.hasGeneratedPhotogrammetryModel == true)
         #expect(viewModel.outputURL != nil)
+    }
+
+    @Test("import in high quality starts silent prewarm generation")
+    @MainActor
+    func importStartsHighPrewarm() async {
+        let tracker = ServiceTracker()
+        let viewModel = PhotogrammetryViewModel(
+            service: StubPhotogrammetryService(
+                tracker: tracker,
+                handler: { _, _, _ in
+                    try await Task.sleep(nanoseconds: 150_000_000)
+                    return URL(fileURLWithPath: "/tmp/prewarm_auto.usdz")
+                }
+            ),
+            isPhotogrammetrySupported: { true }
+        )
+
+        viewModel.handleImportedImageURLs([URL(fileURLWithPath: "/tmp/a.jpg")], behavior: .append)
+
+        #expect(await waitUntil {
+            if case .ready = viewModel.state { return true }
+            return false
+        })
+        #expect(await waitUntilAsync { await tracker.generateCallCount() == 1 })
+        #expect(await tracker.generatedDetails() == [.full])
+    }
+
+    @Test("generate in high reuses prewarmed result without extra generation")
+    @MainActor
+    func generateUsesPrewarmedResult() async {
+        let tracker = ServiceTracker()
+        let outputURL = URL(fileURLWithPath: "/tmp/prewarmed_result.usdz")
+        let viewModel = PhotogrammetryViewModel(
+            service: StubPhotogrammetryService(
+                tracker: tracker,
+                handler: { _, _, _ in
+                    try await Task.sleep(nanoseconds: 80_000_000)
+                    return outputURL
+                }
+            ),
+            isPhotogrammetrySupported: { true }
+        )
+
+        viewModel.handleImportedImageURLs([URL(fileURLWithPath: "/tmp/a.jpg")], behavior: .append)
+        #expect(await waitUntilAsync { await tracker.generateCallCount() == 1 })
+
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        viewModel.generateModel()
+
+        #expect(await waitUntil {
+            if case .completed(let url) = viewModel.state { return url == outputURL }
+            return false
+        })
+        #expect(await tracker.generateCallCount() == 1)
+    }
+
+    @Test("generate promotes running prewarm and completes without second generation")
+    @MainActor
+    func generatePromotesRunningPrewarm() async {
+        let tracker = ServiceTracker()
+        let outputURL = URL(fileURLWithPath: "/tmp/prewarm_promoted.usdz")
+        let viewModel = PhotogrammetryViewModel(
+            service: StubPhotogrammetryService(
+                tracker: tracker,
+                handler: { _, _, onProgress in
+                    onProgress(0.15)
+                    try await Task.sleep(nanoseconds: 120_000_000)
+                    onProgress(0.70)
+                    try await Task.sleep(nanoseconds: 140_000_000)
+                    return outputURL
+                }
+            ),
+            isPhotogrammetrySupported: { true }
+        )
+
+        viewModel.handleImportedImageURLs([URL(fileURLWithPath: "/tmp/a.jpg")], behavior: .append)
+        #expect(await waitUntilAsync { await tracker.generateCallCount() == 1 })
+
+        viewModel.generateModel()
+
+        #expect(await waitUntil {
+            if case .processing = viewModel.state { return true }
+            return false
+        })
+        #expect(await waitUntil {
+            if case .processing(let progress) = viewModel.state, progress >= 0.7 { return true }
+            return false
+        })
+        #expect(await waitUntil {
+            if case .completed(let url) = viewModel.state { return url == outputURL }
+            return false
+        })
+        #expect(await tracker.generateCallCount() == 1)
+    }
+
+    @Test("promoted prewarm catches up progress quickly from background state")
+    @MainActor
+    func promotedPrewarmCatchUpProgress() async {
+        let outputURL = URL(fileURLWithPath: "/tmp/prewarm_catchup.usdz")
+        let viewModel = PhotogrammetryViewModel(
+            service: StubPhotogrammetryService(
+                handler: { _, _, onProgress in
+                    onProgress(0.72)
+                    try await Task.sleep(nanoseconds: 320_000_000)
+                    return outputURL
+                }
+            ),
+            isPhotogrammetrySupported: { true }
+        )
+
+        viewModel.handleImportedImageURLs([URL(fileURLWithPath: "/tmp/a.jpg")], behavior: .append)
+        try? await Task.sleep(nanoseconds: 50_000_000)
+
+        viewModel.generateModel()
+
+        #expect(await waitUntil {
+            if case .processing(let progress) = viewModel.state {
+                return progress >= 0.60
+            }
+            return false
+        })
+    }
+
+    @Test("switching away from high invalidates prewarm and cleans generated artifact")
+    @MainActor
+    func qualityChangeInvalidatesPrewarm() async {
+        let tracker = ServiceTracker()
+        let prewarmOutput = URL(fileURLWithPath: "/tmp/prewarm_for_quality_change.usdz")
+        let viewModel = PhotogrammetryViewModel(
+            service: StubPhotogrammetryService(
+                tracker: tracker,
+                handler: { _, _, _ in prewarmOutput }
+            ),
+            isPhotogrammetrySupported: { true }
+        )
+
+        viewModel.handleImportedImageURLs([URL(fileURLWithPath: "/tmp/a.jpg")], behavior: .append)
+        #expect(await waitUntilAsync { await tracker.generateCallCount() == 1 })
+        try? await Task.sleep(nanoseconds: 80_000_000)
+
+        viewModel.selectedQuality = .normal
+
+        #expect(await waitUntilAsync { await tracker.cleanedURLs().contains(prewarmOutput) })
+    }
+
+    @Test("removing photo invalidates old prewarm and next generate uses classic flow")
+    @MainActor
+    func removePhotoInvalidatesPrewarmAndGenerateRunsClassicFlow() async {
+        let tracker = ServiceTracker()
+        let prewarmOutput = URL(fileURLWithPath: "/tmp/prewarm_removed_photo.usdz")
+        let classicOutput = URL(fileURLWithPath: "/tmp/classic_after_remove.usdz")
+        let viewModel = PhotogrammetryViewModel(
+            service: StubPhotogrammetryService(
+                tracker: tracker,
+                handler: { _, _, _ in
+                    let count = await tracker.generateCallCount()
+                    return count <= 1 ? prewarmOutput : classicOutput
+                }
+            ),
+            isPhotogrammetrySupported: { true }
+        )
+
+        let a = URL(fileURLWithPath: "/tmp/a.jpg")
+        let b = URL(fileURLWithPath: "/tmp/b.jpg")
+        viewModel.handleImportedImageURLs([a, b], behavior: .append)
+        #expect(await waitUntilAsync { await tracker.generateCallCount() == 1 })
+        try? await Task.sleep(nanoseconds: 80_000_000)
+
+        viewModel.removeImage(a)
+        #expect(await waitUntilAsync { await tracker.cleanedURLs().contains(prewarmOutput) })
+        #expect(await tracker.generateCallCount() == 1)
+
+        viewModel.generateModel()
+        #expect(await waitUntil {
+            if case .completed(let url) = viewModel.state { return url == classicOutput }
+            return false
+        })
+        #expect(await tracker.generateCallCount() == 2)
+    }
+
+    @Test("returning to high after quality change relaunches prewarm")
+    @MainActor
+    func returnToHighRelaunchesPrewarm() async {
+        let tracker = ServiceTracker()
+        let viewModel = PhotogrammetryViewModel(
+            service: StubPhotogrammetryService(
+                tracker: tracker,
+                handler: { _, _, _ in
+                    URL(fileURLWithPath: "/tmp/relaunch_\(UUID().uuidString).usdz")
+                }
+            ),
+            isPhotogrammetrySupported: { true }
+        )
+
+        viewModel.handleImportedImageURLs([URL(fileURLWithPath: "/tmp/a.jpg")], behavior: .append)
+        #expect(await waitUntilAsync { await tracker.generateCallCount() == 1 })
+        try? await Task.sleep(nanoseconds: 60_000_000)
+
+        viewModel.selectedQuality = .normal
+        viewModel.selectedQuality = .high
+
+        #expect(await waitUntilAsync { await tracker.generateCallCount() == 2 })
+    }
+
+    @Test("generate with non-high quality never reuses high prewarm")
+    @MainActor
+    func nonHighGenerationDoesNotReusePrewarm() async {
+        let tracker = ServiceTracker()
+        let mediumOutput = URL(fileURLWithPath: "/tmp/medium_generation.usdz")
+        let viewModel = PhotogrammetryViewModel(
+            service: StubPhotogrammetryService(
+                tracker: tracker,
+                handler: { _, detail, _ in
+                    return detail == .medium
+                        ? mediumOutput
+                        : URL(fileURLWithPath: "/tmp/high_prewarm.usdz")
+                }
+            ),
+            isPhotogrammetrySupported: { true }
+        )
+
+        viewModel.handleImportedImageURLs([URL(fileURLWithPath: "/tmp/a.jpg")], behavior: .append)
+        #expect(await waitUntilAsync { await tracker.generateCallCount() == 1 })
+        try? await Task.sleep(nanoseconds: 60_000_000)
+
+        viewModel.selectedQuality = .normal
+        viewModel.generateModel()
+
+        #expect(await waitUntil {
+            if case .completed(let url) = viewModel.state { return url == mediumOutput }
+            return false
+        })
+        #expect(await tracker.generateCallCount() == 2)
+        #expect(await tracker.generatedDetails() == [.full, .medium])
     }
 
     @Test("generation error transitions to failed")
@@ -378,6 +611,22 @@ struct PhotogrammetryViewModelTests {
         }
         return condition()
     }
+
+    @MainActor
+    private func waitUntilAsync(
+        timeoutNanoseconds: UInt64 = 1_500_000_000,
+        stepNanoseconds: UInt64 = 20_000_000,
+        condition: @escaping @Sendable () async -> Bool
+    ) async -> Bool {
+        let deadline = DispatchTime.now().uptimeNanoseconds + timeoutNanoseconds
+        while DispatchTime.now().uptimeNanoseconds < deadline {
+            if await condition() {
+                return true
+            }
+            try? await Task.sleep(nanoseconds: stepNanoseconds)
+        }
+        return await condition()
+    }
 }
 
 private enum ViewModelTestError: LocalizedError {
@@ -387,14 +636,28 @@ private enum ViewModelTestError: LocalizedError {
 }
 
 private struct StubPhotogrammetryService: PhotogrammetryServicing {
+    let tracker: ServiceTracker?
     let handler: @Sendable (
         _ imageURLs: [URL],
         _ detail: PhotogrammetrySession.Request.Detail,
         _ onProgress: @escaping @Sendable (Double) -> Void
     ) async throws -> URL
 
+    init(
+        tracker: ServiceTracker? = nil,
+        handler: @escaping @Sendable (
+            _ imageURLs: [URL],
+            _ detail: PhotogrammetrySession.Request.Detail,
+            _ onProgress: @escaping @Sendable (Double) -> Void
+        ) async throws -> URL
+    ) {
+        self.tracker = tracker
+        self.handler = handler
+    }
+
     func generateUSDZ(from imageURLs: [URL], detail: PhotogrammetrySession.Request.Detail) async throws -> URL {
-        try await handler(imageURLs, detail, { _ in })
+        await tracker?.recordGenerateCall(detail: detail)
+        return try await handler(imageURLs, detail, { _ in })
     }
 
     func generateUSDZ(
@@ -402,14 +665,48 @@ private struct StubPhotogrammetryService: PhotogrammetryServicing {
         detail: PhotogrammetrySession.Request.Detail,
         onProgress: @escaping @Sendable (Double) -> Void
     ) async throws -> URL {
-        try await handler(imageURLs, detail, onProgress)
+        await tracker?.recordGenerateCall(detail: detail)
+        return try await handler(imageURLs, detail, onProgress)
+    }
+
+    func cleanupGeneratedModel(at outputURL: URL) {
+        Task {
+            await tracker?.recordCleanupCall(url: outputURL)
+        }
+    }
+}
+
+private actor ServiceTracker {
+    private var generateCalls = 0
+    private var details: [PhotogrammetrySession.Request.Detail] = []
+    private var cleaned: [URL] = []
+
+    func recordGenerateCall(detail: PhotogrammetrySession.Request.Detail) {
+        generateCalls += 1
+        details.append(detail)
+    }
+
+    func recordCleanupCall(url: URL) {
+        cleaned.append(url)
+    }
+
+    func generateCallCount() -> Int {
+        generateCalls
+    }
+
+    func generatedDetails() -> [PhotogrammetrySession.Request.Detail] {
+        details
+    }
+
+    func cleanedURLs() -> [URL] {
+        cleaned
     }
 }
 
 private struct StubScalingUseCase: ScalingUseCase {
     let scaleHandler: @Sendable (ScalingRequest) throws -> URL
 
-    func makeRequest(file: URL?, uncalibrated: String, real: String) throws -> ScalingRequest {
+    func makeRequest(file: URL?, uncalibrated: String, real: String, overwrite: Bool) throws -> ScalingRequest {
         guard let file else {
             throw ScalingError.invalidInput("Missing file")
         }
@@ -422,7 +719,8 @@ private struct StubScalingUseCase: ScalingUseCase {
         return ScalingRequest(
             file: file,
             uncalibrated: uncalibratedValue,
-            real: realValue
+            real: realValue,
+            overwrite: overwrite
         )
     }
 
