@@ -4,22 +4,38 @@ macOS application (SwiftUI + RealityKit) that generates a 3D `.usdz` model from 
 
 ## Features
 
-- Drag and drop image files into the app.
+- 3-step workflow split across tabs: `Import`, `Process`, `Scale`.
+- Drag and drop image files into the app, or import from the file picker.
 - Supported formats: `jpg`, `jpeg`, `png`, `heic`, `tiff`, `tif`.
 - Inline thumbnail preview of dropped images.
-- Quality selection before generation: `Preview`, `Reduced`, `Medium`, `Full`, `Raw`.
+- Quality selection before generation with 3 levels:
+  - `Low` → Object Capture detail `.preview`
+  - `Normal` → Object Capture detail `.medium`
+  - `High` → Object Capture detail `.full`
+- High-quality prewarm generation is started in the background after image import, and can be reused when launching generation.
 - Asynchronous generation with progress updates.
-- One-click opening of the generated `.usdz` file.
-- USDZ scaling tab with calibrated ratio input and overwrite/new-file mode.
+- Generation cancellation during processing.
+- Export (`Share`) of the latest generated/scaled `.usdz` file to a user-selected destination.
+- Interactive scaling tab:
+  - point-picking measurement directly on the 3D model surface (2 points),
+  - automatic fill of the uncalibrated distance,
+  - wireframe toggle on model click (outside measurement mode),
+  - scaling from measured ratio (`real / uncalibrated`).
 - User-facing error messages for unsupported devices and invalid input.
+- Ephemeral in-app feedback banners for user actions (import, generate, scale, save, cancel).
 
 ## Architecture
 
-- `ContentView`: user interface (drop zone, actions, displayed state).
+- `ContentView`: root container with tab access control and export action.
+- `ImportPhotosTabView`: image import/drop zone and thumbnail grid.
+- `ProcessSettingsTabView`: quality selection, generation status, generate/stop actions.
+- `ScaleTabView`: scaling workflow and measurement controls.
+- `SurfaceMeasurementView`: SceneKit bridge for point picking and on-surface distance measurement.
 - `PhotogrammetryViewModel`: orchestration of UI state and user actions.
 - `PhotogrammetryServicing` / `PhotogrammetryService`: service layer isolating RealityKit.
+- `TemporaryGenerationStore`: temporary workspace lifecycle for Object Capture input/output.
 - `ScalingUseCase` / `USDZScaler`: validated USDZ scaling flow (`real / uncalibrated`) persisted back to disk.
-- `ProcessingState`: high-level domain state (`idle`, `ready`, `processing`, `completed`, `failed`).
+- `ProcessingState`: high-level domain state (`idle`, `ready`, `processing`, `cancelled`, `completed`, `failed`).
 - `SupportedImageFormat`: single source of truth for supported extensions.
 
 This separation keeps the Object Capture workflow isolated from SwiftUI state updates and makes future evolution easier.
@@ -108,7 +124,8 @@ To regenerate PNG renders and the `.icns` fallback:
 
 - `.usdz` output is generated in a temporary directory;
 - each new generation creates a new temporary input/output workspace;
-- no automated test suite yet.
+- scaling currently writes a new file (`scaled_<original_name>.usdz`) instead of overwriting in place from the UI;
+- generated temporary workspaces are cleaned at app shutdown.
 
 ## License
 
