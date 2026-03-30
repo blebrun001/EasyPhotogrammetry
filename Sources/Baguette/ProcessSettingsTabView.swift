@@ -37,7 +37,7 @@ struct ProcessSettingsTabView: View {
             .pickerStyle(.menu)
             .labelsHidden()
             .disabled(!viewModel.canImportImages)
-            .help("Choose generation quality")
+            .help("Choose model quality before generation.")
         }
     }
 
@@ -78,6 +78,7 @@ struct ProcessSettingsTabView: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel("Processing Status")
         .accessibilityValue(presentation.title)
+        .help("Current generation state, including progress and latest details.")
     }
 
     private var actionButton: some View {
@@ -89,7 +90,7 @@ struct ProcessSettingsTabView: View {
                     Label("Stop", systemImage: "stop.fill")
                 }
                 .keyboardShortcut(.cancelAction)
-                .help("Stop model generation")
+                .help("Stop the current model generation.")
                 .accessibilityLabel("Stop Generation")
                 .accessibilityHint("Cancel the 3D model generation in progress")
             } else {
@@ -101,7 +102,7 @@ struct ProcessSettingsTabView: View {
                 }
                 .keyboardShortcut(.defaultAction)
                 .disabled(!viewModel.canGenerateModel)
-                .help("Generate a USDZ model")
+                .help("Generate a USDZ model from the selected photos.")
                 .accessibilityLabel("Generate Model")
                 .accessibilityHint("Run Apple Object Capture with selected images")
             }

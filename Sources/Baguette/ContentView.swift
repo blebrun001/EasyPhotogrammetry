@@ -49,7 +49,7 @@ struct ContentView: View {
                     Image(systemName: "square.and.arrow.up")
                 }
                 .disabled(!canShareModel)
-                .help("Share model")
+                .help("Export the latest generated model as a USDZ file.")
                 .accessibilityLabel("Share")
             }
         }
@@ -149,6 +149,7 @@ private struct EphemeralFeedbackBanner: View {
                     .foregroundStyle(.secondary)
             }
             .buttonStyle(.plain)
+            .help("Dismiss this message.")
             .accessibilityLabel("Dismiss message")
         }
         .padding(.horizontal, 12)

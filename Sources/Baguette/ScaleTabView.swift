@@ -15,6 +15,7 @@ struct ScaleTabView: View {
                         handleMeasurementButtonTap()
                     }
                     .disabled(viewModel.selectedScaleFileURL == nil)
+                    .help(measurementButtonHelpText)
 
                     Spacer()
                 }
@@ -35,15 +36,18 @@ struct ScaleTabView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .help(measurementSurfaceHelpText)
 
-                TextField("real measurment (cm)", text: $viewModel.realMeasurement)
+                TextField("Real measurement (cm)", text: $viewModel.realMeasurement)
                     .textFieldStyle(.roundedBorder)
+                    .help("Enter the real-world distance in centimeters (for example: 12.5).")
 
                 if !viewModel.scalingResultMessage.isEmpty {
                     Text(viewModel.scalingResultMessage)
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
                         .lineLimit(2)
+                        .help("Latest scaling output or error message.")
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -72,6 +76,7 @@ struct ScaleTabView: View {
         .tint(isUncalibratedMeasurementMissing ? .gray : .accentColor)
         .disabled(!viewModel.canScaleModel || isUncalibratedMeasurementMissing)
         .controlSize(.large)
+        .help(scaleButtonHelpText)
     }
 
     private var isUncalibratedMeasurementMissing: Bool {
@@ -90,6 +95,34 @@ struct ScaleTabView: View {
         }
 
         return isMeasurementModeEnabled ? "Select point 1" : "Start measure"
+    }
+
+    private var measurementButtonHelpText: String {
+        if measurementUpdate.pointCount >= 2 {
+            return "Clear current points and start a new distance measurement."
+        }
+
+        if measurementUpdate.pointCount == 1 {
+            return "Click on the model to place the second point."
+        }
+
+        return "Enable measurement mode, then click on the model to place the first point."
+    }
+
+    private var measurementSurfaceHelpText: String {
+        if isMeasurementModeEnabled {
+            return "Click two points on the model to measure a distance."
+        }
+
+        return "Click Start measure to pick points. Click the model to toggle wireframe view."
+    }
+
+    private var scaleButtonHelpText: String {
+        if isUncalibratedMeasurementMissing {
+            return "Measure the model first to set the uncalibrated distance."
+        }
+
+        return "Scale the model using measured distance and real-world centimeters."
     }
 
     private func handleMeasurementButtonTap() {

@@ -47,7 +47,7 @@ struct ImportPhotosTabView: View {
                         Label("Clear all", systemImage: "xmark")
                     }
                     .disabled(!viewModel.canClearSelection)
-                    .help("Clear selected images")
+                    .help("Remove all selected photos from the list.")
                 }
             }
         }
@@ -111,7 +111,7 @@ struct ImportPhotosTabView: View {
             .onTapGesture {
                 viewModel.presentImportPicker()
             }
-            .help("Click to choose images, or drop files")
+            .help("Click to import photos, or drag and drop files here.")
             .dropDestination(for: URL.self) { urls, _ in
                 viewModel.handleImportedImageURLs(urls, behavior: .replace)
                 return true
@@ -161,7 +161,7 @@ private struct ThumbnailView: View {
                     .padding(4)
             }
             .buttonStyle(.plain)
-            .help("Remove this photo")
+            .help("Remove this photo from the selection.")
             .disabled(!canRemove)
         }
         .task(id: imageURL, priority: .utility) {
