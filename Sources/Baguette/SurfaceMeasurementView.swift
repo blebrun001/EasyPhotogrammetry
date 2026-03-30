@@ -85,7 +85,6 @@ struct SurfaceMeasurementView: NSViewRepresentable {
         private var pickedPoints: [SCNVector3] = []
         private var markerNodes: [SCNNode] = []
         private var segmentNode: SCNNode?
-        private var distanceLabelNode: SCNNode?
         private var hoverNode: SCNNode?
 
         init(onMeasurementUpdated: @escaping (_ update: MeasurementUpdate) -> Void) {
@@ -218,7 +217,6 @@ struct SurfaceMeasurementView: NSViewRepresentable {
                 root.addChildNode(second)
 
                 addSegment(from: pickedPoints[0], to: pickedPoints[1], in: root)
-                addDistanceLabel(distanceBetween(pickedPoints[0], pickedPoints[1]), between: pickedPoints[0], and: pickedPoints[1], in: root)
             }
         }
 
@@ -227,15 +225,13 @@ struct SurfaceMeasurementView: NSViewRepresentable {
             markerNodes.removeAll()
             segmentNode?.removeFromParentNode()
             segmentNode = nil
-            distanceLabelNode?.removeFromParentNode()
-            distanceLabelNode = nil
         }
 
         private func showHoverNode(at point: SCNVector3, in view: PointPickingSCNView) {
             guard let root = view.scene?.rootNode else { return }
 
             if hoverNode == nil {
-                let sphere = SCNSphere(radius: 0.003)
+                let sphere = SCNSphere(radius: 0.005)
                 sphere.firstMaterial?.diffuse.contents = NSColor.systemGreen
                 sphere.firstMaterial?.emission.contents = NSColor.systemGreen
                 let node = SCNNode(geometry: sphere)
@@ -253,7 +249,7 @@ struct SurfaceMeasurementView: NSViewRepresentable {
         }
 
         private func makeMarkerNode(color: NSColor) -> SCNNode {
-            let sphere = SCNSphere(radius: 0.004)
+            let sphere = SCNSphere(radius: 0.008)
             sphere.firstMaterial?.diffuse.contents = color
             sphere.firstMaterial?.emission.contents = color
             let node = SCNNode(geometry: sphere)
@@ -271,25 +267,6 @@ struct SurfaceMeasurementView: NSViewRepresentable {
             let node = SCNNode(geometry: geometry)
             node.categoryBitMask = SurfaceMeasurementView.overlayHitCategoryMask
             segmentNode = node
-            root.addChildNode(node)
-        }
-
-        private func addDistanceLabel(_ distance: Double, between a: SCNVector3, and b: SCNVector3, in root: SCNNode) {
-            let text = SCNText(string: String(format: "%.6f", distance), extrusionDepth: 0.0)
-            text.font = NSFont.systemFont(ofSize: 8, weight: .medium)
-            text.flatness = 0.2
-            text.firstMaterial?.diffuse.contents = NSColor.labelColor
-            text.firstMaterial?.isDoubleSided = true
-
-            let node = SCNNode(geometry: text)
-            node.scale = SCNVector3(0.002, 0.002, 0.002)
-            node.constraints = [SCNBillboardConstraint()]
-            node.categoryBitMask = SurfaceMeasurementView.overlayHitCategoryMask
-
-            let midpoint = SCNVector3((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2)
-            node.position = SCNVector3(midpoint.x, midpoint.y + 0.005, midpoint.z)
-
-            distanceLabelNode = node
             root.addChildNode(node)
         }
 

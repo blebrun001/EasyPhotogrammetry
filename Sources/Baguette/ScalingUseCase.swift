@@ -4,11 +4,10 @@ struct ScalingRequest {
     let file: URL
     let uncalibrated: Double
     let real: Double
-    let overwrite: Bool
 }
 
 protocol ScalingUseCase {
-    func makeRequest(file: URL?, uncalibrated: String, real: String, overwrite: Bool) throws -> ScalingRequest
+    func makeRequest(file: URL?, uncalibrated: String, real: String) throws -> ScalingRequest
     func execute(_ request: ScalingRequest) throws -> URL
 }
 
@@ -19,7 +18,7 @@ struct DefaultScalingUseCase: ScalingUseCase {
         self.scaler = scaler
     }
 
-    func makeRequest(file: URL?, uncalibrated: String, real: String, overwrite: Bool) throws -> ScalingRequest {
+    func makeRequest(file: URL?, uncalibrated: String, real: String) throws -> ScalingRequest {
         guard let file else {
             throw ScalingError.invalidInput("Please select a USDZ file.")
         }
@@ -34,8 +33,7 @@ struct DefaultScalingUseCase: ScalingUseCase {
         return ScalingRequest(
             file: file,
             uncalibrated: uncalibratedValue,
-            real: realValue,
-            overwrite: overwrite
+            real: realValue
         )
     }
 
@@ -43,8 +41,7 @@ struct DefaultScalingUseCase: ScalingUseCase {
         try scaler.scaleUSDZ(
             file: request.file,
             uncalibrated: request.uncalibrated,
-            real: request.real,
-            overwrite: request.overwrite
+            real: request.real
         )
     }
 }

@@ -73,7 +73,6 @@ final class PhotogrammetryViewModel: ObservableObject {
     }
     @Published var uncalibratedMeasurement: String = ""
     @Published var realMeasurement: String = ""
-    @Published var overwriteScaledModel: Bool = true
     @Published var scalingResultMessage: String = ""
     @Published private(set) var isScaling = false
     @Published private(set) var measurementPhase: MeasurementPhase = .idle
@@ -290,8 +289,7 @@ final class PhotogrammetryViewModel: ObservableObject {
             let request = try scalingUseCase.makeRequest(
                 file: selectedScaleFileURL,
                 uncalibrated: uncalibratedMeasurement,
-                real: realMeasurement,
-                overwrite: overwriteScaledModel
+                real: realMeasurement
             )
             let resultURL = try scalingUseCase.execute(request)
             scaledModelURL = resultURL

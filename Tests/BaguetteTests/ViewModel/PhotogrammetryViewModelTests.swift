@@ -199,7 +199,6 @@ struct PhotogrammetryViewModelTests {
             #expect(request.file == inputURL)
             #expect(request.uncalibrated == 10)
             #expect(request.real == 25)
-            #expect(request.overwrite == false)
             return outputURL
         }
         let viewModel = PhotogrammetryViewModel(
@@ -210,7 +209,6 @@ struct PhotogrammetryViewModelTests {
         viewModel.selectedScaleFileURL = inputURL
         viewModel.uncalibratedMeasurement = "10"
         viewModel.realMeasurement = "25"
-        viewModel.overwriteScaledModel = false
 
         viewModel.scaleModel()
 
@@ -379,7 +377,7 @@ private struct StubPhotogrammetryService: PhotogrammetryServicing {
 private struct StubScalingUseCase: ScalingUseCase {
     let scaleHandler: (ScalingRequest) throws -> URL
 
-    func makeRequest(file: URL?, uncalibrated: String, real: String, overwrite: Bool) throws -> ScalingRequest {
+    func makeRequest(file: URL?, uncalibrated: String, real: String) throws -> ScalingRequest {
         guard let file else {
             throw ScalingError.invalidInput("Missing file")
         }
@@ -392,8 +390,7 @@ private struct StubScalingUseCase: ScalingUseCase {
         return ScalingRequest(
             file: file,
             uncalibrated: uncalibratedValue,
-            real: realValue,
-            overwrite: overwrite
+            real: realValue
         )
     }
 

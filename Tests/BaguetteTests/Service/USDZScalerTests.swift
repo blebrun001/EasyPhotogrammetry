@@ -13,13 +13,12 @@ struct USDZScalerTests {
             _ = try scaler.scaleUSDZ(
                 file: URL(fileURLWithPath: "/tmp/does-not-exist.usdz"),
                 uncalibrated: 10,
-                real: 20,
-                overwrite: true
+                real: 20
             )
         }
     }
 
-    @Test("creates scaled_ file when overwrite is false")
+    @Test("creates scaled_ file")
     func createsScaledFile() throws {
         let testRoot = try TestFilesystem.makeTempDirectory(prefix: "scale-new")
         defer { TestFilesystem.removeIfPresent(testRoot) }
@@ -28,25 +27,10 @@ struct USDZScalerTests {
         try makeSampleUSDZ(at: input)
 
         let scaler = USDZScaler()
-        let output = try scaler.scaleUSDZ(file: input, uncalibrated: 10, real: 25, overwrite: false)
+        let output = try scaler.scaleUSDZ(file: input, uncalibrated: 10, real: 25)
 
         #expect(output.lastPathComponent == "scaled_model.usdz")
         #expect(FileManager.default.fileExists(atPath: output.path))
-    }
-
-    @Test("overwrite writes result to source path")
-    func overwriteSource() throws {
-        let testRoot = try TestFilesystem.makeTempDirectory(prefix: "scale-overwrite")
-        defer { TestFilesystem.removeIfPresent(testRoot) }
-
-        let input = testRoot.appendingPathComponent("model.usdz")
-        try makeSampleUSDZ(at: input)
-
-        let scaler = USDZScaler()
-        let output = try scaler.scaleUSDZ(file: input, uncalibrated: 5, real: 10, overwrite: true)
-
-        #expect(output == input)
-        #expect(FileManager.default.fileExists(atPath: input.path))
     }
 
     @Test("scaled output is readable as a scene")
@@ -58,7 +42,7 @@ struct USDZScalerTests {
         try makeSampleUSDZ(at: input)
 
         let scaler = USDZScaler()
-        let output = try scaler.scaleUSDZ(file: input, uncalibrated: 2, real: 3, overwrite: false)
+        let output = try scaler.scaleUSDZ(file: input, uncalibrated: 2, real: 3)
 
         let scene = try SCNScene(url: output, options: nil)
         #expect(scene.rootNode.childNodes.isEmpty == false)

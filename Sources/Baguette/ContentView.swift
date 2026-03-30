@@ -7,45 +7,57 @@ import UniformTypeIdentifiers
 struct ContentView: View {
     @StateObject var viewModel: PhotogrammetryViewModel
     @State private var selectedTab: AppTab = .importPhotos
-    @State private var modelPreviewInstanceID = UUID()
 
     var body: some View {
         TabView(selection: $selectedTab) {
             ImportPhotosTabView(viewModel: viewModel)
                 .tabItem {
-                    Label("1. Import", systemImage: "photo.on.rectangle")
+                    tabLabel("Import", systemImage: "photo.on.rectangle", isEnabled: true)
                 }
                 .tag(AppTab.importPhotos)
 
             ProcessSettingsTabView(viewModel: viewModel)
                 .tabItem {
-                    Label("2. Process", systemImage: "slider.horizontal.3")
+                    tabLabel("Process", systemImage: "slider.horizontal.3", isEnabled: canAccessProcess)
                 }
                 .tag(AppTab.process)
                 .disabled(!canAccessProcess)
 
             ScaleTabView(viewModel: viewModel)
                 .tabItem {
-                    Label("3. Scale", systemImage: "ruler")
+                    tabLabel("Scale", systemImage: "ruler", isEnabled: canAccessScale)
                 }
                 .tag(AppTab.scale)
                 .disabled(!canAccessScale)
-
-            Export3DTabView(
-                modelURL: viewModel.outputURL,
-                instanceID: modelPreviewInstanceID,
-                onSaveModel: presentSavePanel(for:)
-            )
-            .tabItem {
-                Label("4. Export", systemImage: "square.and.arrow.down")
+        }
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    guard let outputURL = viewModel.outputURL else { return }
+                    presentSavePanel(for: outputURL)
+                } label: {
+                    Image(systemName: "square.and.arrow.up")
+                }
+                .disabled(!canShareModel)
+                .help("Share model")
+                .accessibilityLabel("Share")
             }
-            .tag(AppTab.export)
-            .disabled(!canAccessExport)
+        }
+        .onAppear {
+            selectedTab = enforceTabAccess(for: selectedTab)
         }
         .onChange(of: selectedTab) { _, newTab in
-            if newTab == .export {
-                modelPreviewInstanceID = UUID()
+            let accessibleTab = enforceTabAccess(for: newTab)
+            guard accessibleTab == newTab else {
+                selectedTab = accessibleTab
+                return
             }
+        }
+        .onChange(of: canAccessProcess) { _, _ in
+            selectedTab = enforceTabAccess(for: selectedTab)
+        }
+        .onChange(of: canAccessScale) { _, _ in
+            selectedTab = enforceTabAccess(for: selectedTab)
         }
     }
 
@@ -57,8 +69,32 @@ struct ContentView: View {
         viewModel.hasGeneratedPhotogrammetryModel
     }
 
-    private var canAccessExport: Bool {
+    private var canShareModel: Bool {
         viewModel.hasExportableModel
+    }
+
+    @ViewBuilder
+    private func tabLabel(_ title: String, systemImage: String, isEnabled: Bool) -> some View {
+        Label {
+            Text(title)
+                .foregroundColor(isEnabled ? .primary : .gray)
+        } icon: {
+            Image(systemName: systemImage)
+                .foregroundColor(isEnabled ? .primary : .gray)
+        }
+    }
+
+    private func enforceTabAccess(for requestedTab: AppTab) -> AppTab {
+        switch requestedTab {
+        case .importPhotos:
+            return .importPhotos
+        case .process:
+            return canAccessProcess ? .process : .importPhotos
+        case .scale:
+            if canAccessScale { return .scale }
+            if canAccessProcess { return .process }
+            return .importPhotos
+        }
     }
 
     private func presentSavePanel(for outputURL: URL) {
@@ -68,7 +104,8 @@ struct ContentView: View {
         }
         panel.canCreateDirectories = true
         panel.nameFieldStringValue = "Model.usdz"
-        panel.directoryURL = outputURL.deletingLastPathComponent()
+        panel.directoryURL = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first
+            ?? outputURL.deletingLastPathComponent()
 
         guard panel.runModal() == .OK, let destinationURL = panel.url else {
             return
@@ -86,7 +123,6 @@ private enum AppTab: Hashable {
     case importPhotos
     case process
     case scale
-    case export
 }
 
 private struct ProcessSettingsTabView: View {
@@ -220,33 +256,8 @@ private struct ScaleTabView: View {
     var body: some View {
         VStack(spacing: 12) {
             Form {
-                Section("File") {
-                    HStack(spacing: 10) {
-                        Button {
-                            presentUSDZOpenPanel()
-                        } label: {
-                            Label("Select USDZ", systemImage: "doc")
-                        }
-                        .help("Select a USDZ model to scale")
-
-                        if let url = viewModel.selectedScaleFileURL {
-                            Text(url.lastPathComponent)
-                                .foregroundStyle(.secondary)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                        } else {
-                            Text("No file selected")
-                                .foregroundStyle(.secondary)
-                        }
-                    }
-                }
-
                 Section("Measurements") {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text(guidanceText)
-                            .font(.subheadline)
-                            .foregroundStyle(.secondary)
-
                         HStack(spacing: 8) {
                             Button {
                                 toggleMeasurementMode()
@@ -256,19 +267,16 @@ private struct ScaleTabView: View {
                                     systemImage: isMeasurementModeEnabled ? "pause.circle" : "dot.scope"
                                 )
                             }
+                            .disabled(viewModel.selectedScaleFileURL == nil)
 
                             Button {
                                 sendEditingCommand(.reset)
                             } label: {
                                 Label("Reset", systemImage: "trash")
                             }
-                            .disabled(measurementUpdate.pointCount == 0)
+                            .disabled(viewModel.selectedScaleFileURL == nil || measurementUpdate.pointCount == 0)
 
                             Spacer()
-
-                            Text(phaseLabel)
-                                .font(.caption.monospaced())
-                                .foregroundStyle(.secondary)
                         }
 
                         SurfaceMeasurementView(
@@ -287,23 +295,10 @@ private struct ScaleTabView: View {
                         }
                         .frame(minHeight: 260, maxHeight: 340)
                         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-                        HStack(spacing: 8) {
-                            Text(distanceStatusText)
-                                .font(.caption)
-                                .foregroundStyle(.secondary)
-
-                            Spacer()
-                        }
                     }
-
-                    TextField("Uncalibrated measure", text: $viewModel.uncalibratedMeasurement)
-                        .textFieldStyle(.roundedBorder)
 
                     TextField("Calibrated measure (cm)", text: $viewModel.realMeasurement)
                         .textFieldStyle(.roundedBorder)
-
-                    Toggle("Overwrite original file", isOn: $viewModel.overwriteScaledModel)
 
                     if !viewModel.scalingResultMessage.isEmpty {
                         Text(viewModel.scalingResultMessage)
@@ -340,24 +335,6 @@ private struct ScaleTabView: View {
         .controlSize(.large)
     }
 
-    private func presentUSDZOpenPanel() {
-        let panel = NSOpenPanel()
-        if let usdzType = UTType(filenameExtension: "usdz") {
-            panel.allowedContentTypes = [usdzType]
-        }
-        panel.allowsMultipleSelection = false
-        panel.canChooseDirectories = false
-        panel.canChooseFiles = true
-
-        guard panel.runModal() == .OK, let url = panel.url else {
-            return
-        }
-
-        viewModel.selectedScaleFileURL = url
-        viewModel.scalingResultMessage = ""
-        resetMeasurementUI()
-    }
-
     private func toggleMeasurementMode() {
         isMeasurementModeEnabled.toggle()
         sendEditingCommand(.none)
@@ -373,46 +350,6 @@ private struct ScaleTabView: View {
         measurementUpdate = .idle
         sendEditingCommand(.reset)
         viewModel.resetMeasurementState(clearUncalibrated: true)
-    }
-
-    private var distanceStatusText: String {
-        if let distance = measurementUpdate.distance {
-            return String(format: "Distance: %.6f", distance)
-        }
-
-        return "Hover the model, then click to place a point."
-    }
-
-    private var phaseLabel: String {
-        switch measurementUpdate.phase {
-        case .idle:
-            return "Idle"
-        case .pickPoint1:
-            return "Pick P1"
-        case .pickPoint2:
-            return "Pick P2"
-        case .done:
-            return "Done"
-        }
-    }
-
-    private var guidanceText: String {
-        if measurementUpdate.phase == .done {
-            return "Distance measured. Measurement mode is disabled."
-        }
-
-        guard isMeasurementModeEnabled else {
-            return "Enable measurement mode, then click on the surface to place points."
-        }
-
-        switch measurementUpdate.phase {
-        case .idle, .pickPoint1:
-            return "Select a point."
-        case .pickPoint2:
-            return "Select another point."
-        case .done:
-            return "Distance measured. Measurement mode is disabled."
-        }
     }
 }
 

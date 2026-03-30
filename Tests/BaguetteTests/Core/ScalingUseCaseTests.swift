@@ -9,7 +9,7 @@ struct ScalingUseCaseTests {
         let useCase = DefaultScalingUseCase(scaler: SpyScaler())
 
         #expect(throws: ScalingError.self) {
-            _ = try useCase.makeRequest(file: nil, uncalibrated: "10", real: "20", overwrite: true)
+            _ = try useCase.makeRequest(file: nil, uncalibrated: "10", real: "20")
         }
     }
 
@@ -19,10 +19,10 @@ struct ScalingUseCaseTests {
         let file = URL(fileURLWithPath: "/tmp/model.usdz")
 
         #expect(throws: ScalingError.self) {
-            _ = try useCase.makeRequest(file: file, uncalibrated: "abc", real: "20", overwrite: true)
+            _ = try useCase.makeRequest(file: file, uncalibrated: "abc", real: "20")
         }
         #expect(throws: ScalingError.self) {
-            _ = try useCase.makeRequest(file: file, uncalibrated: "10", real: "0", overwrite: true)
+            _ = try useCase.makeRequest(file: file, uncalibrated: "10", real: "0")
         }
     }
 
@@ -31,17 +31,16 @@ struct ScalingUseCaseTests {
         let useCase = DefaultScalingUseCase(scaler: SpyScaler())
         let file = URL(fileURLWithPath: "/tmp/model.usdz")
 
-        let request = try useCase.makeRequest(file: file, uncalibrated: "12.5", real: "25", overwrite: false)
+        let request = try useCase.makeRequest(file: file, uncalibrated: "12.5", real: "25")
 
         #expect(request.file == file)
         #expect(request.uncalibrated == 12.5)
         #expect(request.real == 25)
-        #expect(request.overwrite == false)
     }
 }
 
 private struct SpyScaler: USDZScaling {
-    func scaleUSDZ(file: URL, uncalibrated: Double, real: Double, overwrite: Bool) throws -> URL {
+    func scaleUSDZ(file: URL, uncalibrated: Double, real: Double) throws -> URL {
         file
     }
 }
