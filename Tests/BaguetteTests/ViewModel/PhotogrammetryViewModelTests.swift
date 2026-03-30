@@ -108,8 +108,15 @@ struct PhotogrammetryViewModelTests {
             return false
         })
         #expect(await waitUntil {
-            if case .processing(let progress) = viewModel.state { return progress == 1 }
-            return false
+            switch viewModel.state {
+            case .processing(let progress):
+                return progress == 1
+            case .completed:
+                // CI can transition from processing(1.0) to completed between two polls.
+                return true
+            default:
+                return false
+            }
         })
 
         #expect(await waitUntil {
