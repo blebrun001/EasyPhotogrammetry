@@ -30,6 +30,18 @@ struct ContentView: View {
                 .tag(AppTab.scale)
                 .disabled(!canAccessScale)
         }
+        .overlay(alignment: .top) {
+            if let feedback = viewModel.ephemeralFeedback {
+                EphemeralFeedbackBanner(
+                    message: feedback.message,
+                    onDismiss: { viewModel.clearEphemeralFeedback() }
+                )
+                .padding(.top, 12)
+                .padding(.horizontal, 16)
+                .transition(.move(edge: .top).combined(with: .opacity))
+            }
+        }
+        .animation(.easeInOut(duration: 0.22), value: viewModel.ephemeralFeedback?.id)
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
@@ -116,6 +128,37 @@ struct ContentView: View {
         } catch {
             viewModel.state = .failed(message: "Unable to save model: \(error.localizedDescription)")
         }
+    }
+}
+
+private struct EphemeralFeedbackBanner: View {
+    let message: String
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "checkmark.circle.fill")
+                .foregroundStyle(.green)
+
+            Text(message)
+                .font(.subheadline)
+                .lineLimit(2)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            Button(action: onDismiss) {
+                Image(systemName: "xmark")
+                    .font(.caption.weight(.bold))
+                    .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Dismiss message")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 10)
+        .background(.regularMaterial, in: Capsule())
+        .shadow(color: .black.opacity(0.14), radius: 8, y: 2)
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel(message)
     }
 }
 
@@ -331,8 +374,16 @@ private struct ScaleTabView: View {
                 .frame(minWidth: 140)
         }
         .keyboardShortcut(.defaultAction)
-        .disabled(!viewModel.canScaleModel)
+        .buttonStyle(.borderedProminent)
+        .tint(isUncalibratedMeasurementMissing ? .gray : .accentColor)
+        .disabled(!viewModel.canScaleModel || isUncalibratedMeasurementMissing)
         .controlSize(.large)
+    }
+
+    private var isUncalibratedMeasurementMissing: Bool {
+        viewModel.uncalibratedMeasurement
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .isEmpty
     }
 
     private func toggleMeasurementMode() {

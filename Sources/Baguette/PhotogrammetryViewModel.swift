@@ -60,6 +60,11 @@ enum ModelQuality: String, CaseIterable, Identifiable {
 /// Main UI state holder for drag-and-drop and model generation flow.
 @MainActor
 final class PhotogrammetryViewModel: ObservableObject {
+    struct EphemeralFeedback: Equatable, Identifiable {
+        let id = UUID()
+        let message: String
+    }
+
     @Published private(set) var droppedImageURLs: [URL] = []
     @Published var state: ProcessingState = .idle
     @Published var isDropTargeted = false
@@ -74,6 +79,7 @@ final class PhotogrammetryViewModel: ObservableObject {
     @Published var uncalibratedMeasurement: String = ""
     @Published var realMeasurement: String = ""
     @Published var scalingResultMessage: String = ""
+    @Published private(set) var ephemeralFeedback: EphemeralFeedback?
     @Published private(set) var isScaling = false
     @Published private(set) var measurementPhase: MeasurementPhase = .idle
     @Published private(set) var scalingSuccessCount = 0
@@ -84,6 +90,7 @@ final class PhotogrammetryViewModel: ObservableObject {
     private let fileManager: FileManaging
     private let itemProviderLoader: ItemProviderLoading
     private var generationTask: Task<Void, Never>?
+    private var feedbackDismissTask: Task<Void, Never>?
     private var generatedModelURL: URL?
     private var scaledModelURL: URL?
 
@@ -233,6 +240,7 @@ final class PhotogrammetryViewModel: ObservableObject {
         scaledModelURL = nil
         scalingSuccessCount = 0
         state = .idle
+        showEphemeralFeedback("Photo selection has been successfully cleared.")
     }
 
     func removeImage(_ url: URL) {
@@ -253,6 +261,7 @@ final class PhotogrammetryViewModel: ObservableObject {
     func generateModel() {
         guard canGenerateModel else { return }
         generationTask?.cancel()
+        showEphemeralFeedback("3D model generation has started.")
         generationTask = Task { [weak self] in
             await self?.runGeneration()
         }
@@ -263,6 +272,7 @@ final class PhotogrammetryViewModel: ObservableObject {
         generationTask?.cancel()
         generationTask = nil
         state = .cancelled
+        showEphemeralFeedback("3D model generation has been cancelled.")
     }
 
     func saveGeneratedModel(to destinationURL: URL) throws {
@@ -279,10 +289,12 @@ final class PhotogrammetryViewModel: ObservableObject {
             try fileManager.removeItem(at: finalDestination)
         }
         try fileManager.copyItem(at: sourceURL, to: finalDestination)
+        showEphemeralFeedback("3D model has been successfully saved.")
     }
 
     func scaleModel() {
         isScaling = true
+        showEphemeralFeedback("3D model scaling has started.")
         defer { isScaling = false }
 
         do {
@@ -296,6 +308,7 @@ final class PhotogrammetryViewModel: ObservableObject {
             selectedScaleFileURL = resultURL
             scalingSuccessCount += 1
             scalingResultMessage = "Scaled model: \(resultURL.lastPathComponent)"
+            showEphemeralFeedback("3D model has been successfully scaled.")
         } catch {
             scalingResultMessage = "Scaling error: \(error.localizedDescription)"
         }
@@ -311,6 +324,10 @@ final class PhotogrammetryViewModel: ObservableObject {
 
         guard let distance = update.distance else { return }
         applyMeasuredUncalibratedDistance(distance)
+
+        if update.phase == .done {
+            showEphemeralFeedback("Uncalibrated measurement has been successfully acquired.")
+        }
     }
 
     func resetMeasurementState(clearUncalibrated: Bool) {
@@ -349,6 +366,7 @@ final class PhotogrammetryViewModel: ObservableObject {
             scalingResultMessage = ""
             resetMeasurementState(clearUncalibrated: true)
             state = .completed(url: outputURL)
+            showEphemeralFeedback("3D model has been successfully generated.")
         } catch is CancellationError {
             state = .cancelled
         } catch {
@@ -383,6 +401,26 @@ final class PhotogrammetryViewModel: ObservableObject {
         scalingSuccessCount = 0
         resetMeasurementState(clearUncalibrated: true)
         state = .ready
+        showEphemeralFeedback("Photos have been successfully imported (\(droppedImageURLs.count)).")
+    }
+
+    func clearEphemeralFeedback() {
+        feedbackDismissTask?.cancel()
+        feedbackDismissTask = nil
+        ephemeralFeedback = nil
+    }
+
+    private func showEphemeralFeedback(_ message: String, durationNanoseconds: UInt64 = 2_500_000_000) {
+        feedbackDismissTask?.cancel()
+        ephemeralFeedback = EphemeralFeedback(message: message)
+
+        feedbackDismissTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: durationNanoseconds)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                self?.ephemeralFeedback = nil
+            }
+        }
     }
 
     private static func uniquePreservingOrder(_ urls: [URL]) -> [URL] {
