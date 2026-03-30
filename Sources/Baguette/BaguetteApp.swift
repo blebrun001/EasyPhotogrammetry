@@ -1,13 +1,17 @@
 import AppKit
 import SwiftUI
 
+/// App delegate used for lifecycle cleanup of temporary generation artifacts.
 final class AppDelegate: NSObject, NSApplicationDelegate {
+    /// Cleans temporary photogrammetry workspaces when the app exits.
+    /// - Parameter notification: Standard termination notification from AppKit.
     func applicationWillTerminate(_ notification: Notification) {
         TemporaryGenerationStore.shared.cleanupAll()
     }
 }
 
 @main
+/// Main SwiftUI entry point for Baguette.
 struct BaguetteApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var viewModel = PhotogrammetryViewModel(service: PhotogrammetryService())
@@ -27,6 +31,7 @@ struct BaguetteApp: App {
         }
     }
 
+    /// Displays a custom About panel with license and version details.
     private func showAboutPanel() {
         let appName = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "Baguette"
         let shortVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
@@ -52,6 +57,7 @@ struct BaguetteApp: App {
     }
 }
 
+/// Custom key used to expose copyright text in the About panel.
 private extension NSApplication.AboutPanelOptionKey {
     static let copyright = NSApplication.AboutPanelOptionKey(rawValue: "Copyright")
 }

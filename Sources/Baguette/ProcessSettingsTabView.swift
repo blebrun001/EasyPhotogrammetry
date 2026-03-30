@@ -1,5 +1,6 @@
 import SwiftUI
 
+/// Process tab responsible for quality configuration, status display, and generation actions.
 struct ProcessSettingsTabView: View {
     @ObservedObject var viewModel: PhotogrammetryViewModel
 
@@ -41,6 +42,7 @@ struct ProcessSettingsTabView: View {
         }
     }
 
+    /// Current generation status area (title, optional detail, optional progress).
     private var statusSection: some View {
         let presentation = viewModel.state.presentation
 
@@ -81,6 +83,7 @@ struct ProcessSettingsTabView: View {
         .help("Current generation state, including progress and latest details.")
     }
 
+    /// Shows either Generate or Stop action depending on the current processing state.
     private var actionButton: some View {
         Group {
             if viewModel.canCancelGeneration {
@@ -110,6 +113,9 @@ struct ProcessSettingsTabView: View {
         .controlSize(.large)
     }
 
+    /// Maps semantic status tone to UI color.
+    /// - Parameter tone: Status presentation tone.
+    /// - Returns: Associated color used in the Process tab.
     private func color(for tone: StatusPresentation.Tone) -> Color {
         switch tone {
         case .secondary:

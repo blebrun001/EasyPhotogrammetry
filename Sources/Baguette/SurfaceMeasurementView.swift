@@ -2,6 +2,7 @@ import AppKit
 import SceneKit
 import SwiftUI
 
+/// Measurement interaction lifecycle for the SceneKit picking workflow.
 enum MeasurementPhase: Equatable {
     case idle
     case pickPoint1
@@ -9,11 +10,13 @@ enum MeasurementPhase: Equatable {
     case done
 }
 
+/// One-shot editing commands sent by SwiftUI to the SceneKit coordinator.
 enum MeasurementEditingCommand: Equatable {
     case none
     case reset
 }
 
+/// Snapshot sent from SceneKit measurement state back to SwiftUI.
 struct MeasurementUpdate: Equatable {
     let pointCount: Int
     let distance: Double?
@@ -22,6 +25,7 @@ struct MeasurementUpdate: Equatable {
     static let idle = MeasurementUpdate(pointCount: 0, distance: nil, phase: .idle)
 }
 
+/// NSViewRepresentable wrapper around SceneKit used to pick points on the generated mesh.
 struct SurfaceMeasurementView: NSViewRepresentable {
     fileprivate static let modelHitCategoryMask = 1 << 0
     fileprivate static let overlayHitCategoryMask = 1 << 1
@@ -32,10 +36,12 @@ struct SurfaceMeasurementView: NSViewRepresentable {
     let editingCommandToken: UUID
     let onMeasurementUpdated: (_ update: MeasurementUpdate) -> Void
 
+    /// Creates the coordinator that owns SceneKit state and interaction logic.
     func makeCoordinator() -> Coordinator {
         Coordinator(onMeasurementUpdated: onMeasurementUpdated)
     }
 
+    /// Creates and configures the SceneKit view used for picking and hover interactions.
     func makeNSView(context: Context) -> PointPickingSCNView {
         let view = PointPickingSCNView()
         view.allowsCameraControl = true
@@ -64,6 +70,7 @@ struct SurfaceMeasurementView: NSViewRepresentable {
         return view
     }
 
+    /// Syncs representable inputs into the coordinator/view without rebuilding the SceneKit view.
     func updateNSView(_ nsView: PointPickingSCNView, context: Context) {
         context.coordinator.onMeasurementUpdated = onMeasurementUpdated
 
@@ -81,6 +88,7 @@ struct SurfaceMeasurementView: NSViewRepresentable {
         }
     }
 
+    /// Detaches callbacks and scene content before view teardown.
     static func dismantleNSView(_ nsView: PointPickingSCNView, coordinator: Coordinator) {
         nsView.onHover = nil
         nsView.onPick = nil
@@ -89,6 +97,7 @@ struct SurfaceMeasurementView: NSViewRepresentable {
     }
 
     @MainActor
+    /// Owns all SceneKit state required for measurement, hover feedback, and wireframe toggling.
     final class Coordinator {
         private struct MaterialSnapshot {
             let fillMode: SCNFillMode
@@ -114,6 +123,10 @@ struct SurfaceMeasurementView: NSViewRepresentable {
             self.onMeasurementUpdated = onMeasurementUpdated
         }
 
+        /// Loads a new model scene and resets measurement overlays when the model URL changes.
+        /// - Parameters:
+        ///   - view: SceneKit view receiving the scene.
+        ///   - modelURL: Optional model URL to load.
         func configure(sceneIn view: PointPickingSCNView, for modelURL: URL?) {
             currentModelURL = modelURL
             clearMeasurementNodes()
@@ -145,6 +158,10 @@ struct SurfaceMeasurementView: NSViewRepresentable {
             emitUpdate()
         }
 
+        /// Enables or disables measurement mode and updates phase accordingly.
+        /// - Parameters:
+        ///   - enabled: Whether picking mode should be active.
+        ///   - view: SceneKit view hosting interactions.
         func setMeasurementMode(_ enabled: Bool, in view: PointPickingSCNView) {
             lastMeasurementMode = enabled
             view.isMeasurementModeEnabled = enabled
@@ -160,6 +177,10 @@ struct SurfaceMeasurementView: NSViewRepresentable {
             view.needsDisplay = true
         }
 
+        /// Applies one-shot editing commands from SwiftUI.
+        /// - Parameters:
+        ///   - command: Editing command to apply.
+        ///   - view: SceneKit view hosting overlays.
         func apply(command: MeasurementEditingCommand, in view: PointPickingSCNView) {
             switch command {
             case .none:
@@ -174,6 +195,10 @@ struct SurfaceMeasurementView: NSViewRepresentable {
             }
         }
 
+        /// Updates hover indicator over the closest mesh intersection under the pointer.
+        /// - Parameters:
+        ///   - location: Pointer location in view coordinates.
+        ///   - view: SceneKit view used for hit testing.
         func handleHover(at location: NSPoint, in view: PointPickingSCNView) {
             guard lastMeasurementMode else { return }
 
@@ -187,6 +212,10 @@ struct SurfaceMeasurementView: NSViewRepresentable {
             view.needsDisplay = true
         }
 
+        /// Handles click picking and builds measurement overlays from selected points.
+        /// - Parameters:
+        ///   - location: Click location in view coordinates.
+        ///   - view: SceneKit view used for hit testing and overlays.
         func handlePick(at location: NSPoint, in view: PointPickingSCNView) {
             guard lastMeasurementMode else { return }
             guard let intersection = view.meshIntersection(at: location) else { return }
@@ -210,6 +239,8 @@ struct SurfaceMeasurementView: NSViewRepresentable {
             view.needsDisplay = true
         }
 
+        /// Toggles model wireframe display when measurement mode is off.
+        /// - Parameter view: SceneKit view containing the model.
         func handleModelTap(in view: PointPickingSCNView) {
             guard !lastMeasurementMode else { return }
             isWireframeEnabled.toggle()
@@ -217,6 +248,7 @@ struct SurfaceMeasurementView: NSViewRepresentable {
             view.needsDisplay = true
         }
 
+        /// Emits current measurement state snapshot to SwiftUI.
         private func emitUpdate() {
             onMeasurementUpdated(
                 MeasurementUpdate(
@@ -227,11 +259,14 @@ struct SurfaceMeasurementView: NSViewRepresentable {
             )
         }
 
+        /// Returns the current measured distance when two points are available.
         private func currentDistance() -> Double? {
             guard pickedPoints.count == 2 else { return nil }
             return distanceBetween(pickedPoints[0], pickedPoints[1])
         }
 
+        /// Recreates point markers and the connecting segment based on selected points.
+        /// - Parameter view: SceneKit view where overlays should be attached.
         private func rebuildMeasurementNodes(in view: PointPickingSCNView) {
             clearMeasurementNodes()
             guard let root = view.scene?.rootNode else { return }
@@ -253,6 +288,7 @@ struct SurfaceMeasurementView: NSViewRepresentable {
             }
         }
 
+        /// Removes all persistent measurement overlays (markers + segment).
         private func clearMeasurementNodes() {
             markerNodes.forEach { $0.removeFromParentNode() }
             markerNodes.removeAll()
@@ -260,6 +296,10 @@ struct SurfaceMeasurementView: NSViewRepresentable {
             segmentNode = nil
         }
 
+        /// Shows or creates the hover marker at the given point.
+        /// - Parameters:
+        ///   - point: World-space intersection point.
+        ///   - view: SceneKit view containing the root node.
         private func showHoverNode(at point: SCNVector3, in view: PointPickingSCNView) {
             guard let root = view.scene?.rootNode else { return }
 
@@ -277,10 +317,14 @@ struct SurfaceMeasurementView: NSViewRepresentable {
             hoverNode?.isHidden = false
         }
 
+        /// Hides the transient hover marker.
         private func hideHoverNode() {
             hoverNode?.isHidden = true
         }
 
+        /// Creates a measurement marker sphere with category configured for overlay hit filtering.
+        /// - Parameter color: Marker color.
+        /// - Returns: Configured marker node.
         private func makeMarkerNode(color: NSColor) -> SCNNode {
             let sphere = SCNSphere(radius: 0.008)
             sphere.firstMaterial?.diffuse.contents = color
@@ -290,6 +334,11 @@ struct SurfaceMeasurementView: NSViewRepresentable {
             return node
         }
 
+        /// Adds a line segment between two picked points.
+        /// - Parameters:
+        ///   - start: First point.
+        ///   - end: Second point.
+        ///   - root: Root node that owns the segment overlay.
         private func addSegment(from start: SCNVector3, to end: SCNVector3, in root: SCNNode) {
             let source = SCNGeometrySource(vertices: [start, end])
             let element = SCNGeometryElement(indices: [Int32(0), Int32(1)], primitiveType: .line)
@@ -303,6 +352,7 @@ struct SurfaceMeasurementView: NSViewRepresentable {
             root.addChildNode(node)
         }
 
+        /// Computes Euclidean distance between two SceneKit vectors.
         private func distanceBetween(_ a: SCNVector3, _ b: SCNVector3) -> Double {
             let dx = Double(a.x - b.x)
             let dy = Double(a.y - b.y)
@@ -310,6 +360,8 @@ struct SurfaceMeasurementView: NSViewRepresentable {
             return (dx * dx + dy * dy + dz * dz).squareRoot()
         }
 
+        /// Applies model fill mode (solid or wireframe) and restores original material snapshots when needed.
+        /// - Parameter view: SceneKit view containing model nodes.
         private func applyModelFillMode(in view: PointPickingSCNView) {
             let fillMode: SCNFillMode = isWireframeEnabled ? .lines : .fill
             let isDarkMode = view.isDarkAppearance
@@ -373,6 +425,7 @@ struct SurfaceMeasurementView: NSViewRepresentable {
     }
 }
 
+/// SceneKit view subclass that exposes hover/pick/tap callbacks for the measurement tool.
 final class PointPickingSCNView: SCNView {
     var isMeasurementModeEnabled = false
     var onHover: ((NSPoint) -> Void)?
@@ -382,6 +435,7 @@ final class PointPickingSCNView: SCNView {
     private var trackingAreaRef: NSTrackingArea?
     private var mouseDownLocation: NSPoint?
 
+    /// Keeps a tracking area that follows the visible rect so hover updates remain active.
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
 
@@ -399,6 +453,7 @@ final class PointPickingSCNView: SCNView {
         trackingAreaRef = area
     }
 
+    /// Forwards pointer motion only when measurement mode is enabled.
     override func mouseMoved(with event: NSEvent) {
         guard isMeasurementModeEnabled else {
             super.mouseMoved(with: event)
@@ -409,6 +464,7 @@ final class PointPickingSCNView: SCNView {
         onHover?(location)
     }
 
+    /// Captures pick interactions in measurement mode and preserves default camera controls otherwise.
     override func mouseDown(with event: NSEvent) {
         let location = convert(event.locationInWindow, from: nil)
 
@@ -421,6 +477,7 @@ final class PointPickingSCNView: SCNView {
         onPick?(location)
     }
 
+    /// Detects click-like taps on the model to toggle wireframe mode when not measuring.
     override func mouseUp(with event: NSEvent) {
         let location = convert(event.locationInWindow, from: nil)
         defer { mouseDownLocation = nil }
@@ -439,6 +496,9 @@ final class PointPickingSCNView: SCNView {
         onModelTap?(location)
     }
 
+    /// Returns the closest mesh hit under a view-space point.
+    /// - Parameter point: Hit-test point in view coordinates.
+    /// - Returns: Nearest valid mesh intersection if one exists.
     func meshIntersection(at point: NSPoint) -> SCNHitTestResult? {
         let options: [SCNHitTestOption: Any] = [
             .firstFoundOnly: false,
@@ -458,6 +518,7 @@ final class PointPickingSCNView: SCNView {
         })
     }
 
+    /// Squared distance helper used to avoid unnecessary square roots when sorting hits.
     private func squaredDistance(from a: SCNVector3, to b: SCNVector3) -> CGFloat {
         let dx = a.x - b.x
         let dy = a.y - b.y
@@ -468,6 +529,7 @@ final class PointPickingSCNView: SCNView {
         return dx2 + dy2 + dz2
     }
 
+    /// Convenience flag for dark appearance specific wireframe styling.
     var isDarkAppearance: Bool {
         effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
     }

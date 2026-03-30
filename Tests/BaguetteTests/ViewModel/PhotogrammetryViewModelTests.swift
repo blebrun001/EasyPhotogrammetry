@@ -103,6 +103,7 @@ struct PhotogrammetryViewModelTests {
         viewModel.handleImportedImageURLs([URL(fileURLWithPath: "/tmp/a.jpg")], behavior: .append)
         viewModel.generateModel()
 
+        // The processing fallback may set `.processing(0)` before first progress callback arrives.
         #expect(await waitUntil {
             if case .processing = viewModel.state { return true }
             return false
@@ -173,6 +174,7 @@ struct PhotogrammetryViewModelTests {
         viewModel.handleImportedImageURLs([URL(fileURLWithPath: "/tmp/a.jpg")], behavior: .append)
         #expect(await waitUntilAsync { await tracker.generateCallCount() == 1 })
 
+        // Prewarm should have already produced an output; generate must reuse it without a second service call.
         try? await Task.sleep(nanoseconds: 150_000_000)
         viewModel.generateModel()
 
@@ -205,6 +207,7 @@ struct PhotogrammetryViewModelTests {
         viewModel.handleImportedImageURLs([URL(fileURLWithPath: "/tmp/a.jpg")], behavior: .append)
         #expect(await waitUntilAsync { await tracker.generateCallCount() == 1 })
 
+        // Generate should promote the running prewarm task instead of creating another generation request.
         viewModel.generateModel()
 
         #expect(await waitUntil {

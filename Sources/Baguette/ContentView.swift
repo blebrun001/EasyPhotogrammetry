@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// Top-level tab container coordinating navigation between import, process, and scale flows.
 struct ContentView: View {
     @ObservedObject var viewModel: PhotogrammetryViewModel
     @State private var selectedTab: AppTab = .importPhotos
@@ -83,6 +84,12 @@ struct ContentView: View {
         viewModel.outputURL != nil
     }
 
+    /// Builds a tab label that visually reflects enabled/disabled accessibility state.
+    /// - Parameters:
+    ///   - title: Tab title.
+    ///   - systemImage: SF Symbol identifier.
+    ///   - isEnabled: Whether the tab is currently accessible.
+    /// - Returns: Styled tab label view.
     @ViewBuilder
     private func tabLabel(_ title: String, systemImage: String, isEnabled: Bool) -> some View {
         Label {
@@ -94,6 +101,9 @@ struct ContentView: View {
         }
     }
 
+    /// Redirects a requested tab to the nearest accessible tab based on current app state.
+    /// - Parameter requestedTab: Tab requested by the user.
+    /// - Returns: Effective tab that can be displayed.
     private func enforceTabAccess(for requestedTab: AppTab) -> AppTab {
         switch requestedTab {
         case .importPhotos:
@@ -107,6 +117,8 @@ struct ContentView: View {
         }
     }
 
+    /// Presents a save panel and delegates file export to the view model.
+    /// - Parameter outputURL: Latest generated output used to seed the default directory.
     private func presentSavePanel(for outputURL: URL) {
         let panel = NSSavePanel()
         if let usdzType = UTType(filenameExtension: "usdz") {
@@ -129,6 +141,7 @@ struct ContentView: View {
     }
 }
 
+/// Temporary top banner used to display transient success/status feedback.
 private struct EphemeralFeedbackBanner: View {
     let message: String
     let onDismiss: () -> Void
@@ -161,6 +174,7 @@ private struct EphemeralFeedbackBanner: View {
     }
 }
 
+/// Main application tabs.
 enum AppTab: Hashable {
     case importPhotos
     case process

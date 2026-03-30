@@ -1,5 +1,6 @@
 import Foundation
 
+/// High-level state machine for photogrammetry generation in the UI.
 enum ProcessingState: Equatable {
     case idle
     case ready
@@ -8,6 +9,7 @@ enum ProcessingState: Equatable {
     case completed(url: URL)
     case failed(message: String)
 
+    /// Short status text used in compact UI surfaces.
     var statusText: String {
         switch self {
         case .idle:
@@ -25,6 +27,7 @@ enum ProcessingState: Equatable {
         }
     }
 
+    /// Current progress value for progress-capable states, otherwise `0`.
     var progressValue: Double {
         switch self {
         case .processing(let progress):
@@ -34,6 +37,7 @@ enum ProcessingState: Equatable {
         }
     }
 
+    /// Rich presentation model used by the Process tab.
     var presentation: StatusPresentation {
         switch self {
         case .idle:
@@ -89,7 +93,9 @@ enum ProcessingState: Equatable {
     }
 }
 
+/// Render-ready status details consumed by SwiftUI views.
 struct StatusPresentation: Equatable {
+    /// Visual semantic used to map status to colors/icons.
     enum Tone: Equatable {
         case secondary
         case success
@@ -103,6 +109,13 @@ struct StatusPresentation: Equatable {
     let progress: Double?
     let progressText: String?
 
+    /// - Parameters:
+    ///   - title: Main status line.
+    ///   - detail: Optional secondary message.
+    ///   - symbolName: Optional SF Symbol describing the state.
+    ///   - tone: Semantic tone used by the view.
+    ///   - progress: Optional progress value in `[0, 1]`.
+    ///   - progressText: Optional preformatted progress text for display.
     init(
         title: String,
         detail: String?,

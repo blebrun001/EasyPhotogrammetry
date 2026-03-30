@@ -3,6 +3,7 @@ import ImageIO
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// Import tab responsible for drag-and-drop and picker-based photo selection.
 struct ImportPhotosTabView: View {
     @ObservedObject var viewModel: PhotogrammetryViewModel
 
@@ -34,6 +35,7 @@ struct ImportPhotosTabView: View {
         }
     }
 
+    /// Primary section containing drop zone and selection management controls.
     private var importSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             dropZoneContainer
@@ -55,6 +57,7 @@ struct ImportPhotosTabView: View {
         .accessibilityHint("Drag and drop images here, or click to open the file picker")
     }
 
+    /// Dynamic drop zone content: placeholder text when empty, thumbnail grid when populated.
     @ViewBuilder
     private var dropZone: some View {
         if viewModel.droppedImageURLs.isEmpty {
@@ -95,6 +98,7 @@ struct ImportPhotosTabView: View {
         }
     }
 
+    /// Stylized drop target container wiring tap-to-import and drag-and-drop behaviors.
     private var dropZoneContainer: some View {
         dropZone
             .frame(maxWidth: .infinity, minHeight: 130, maxHeight: .infinity)
@@ -121,6 +125,7 @@ struct ImportPhotosTabView: View {
     }
 }
 
+/// Thumbnail tile for one imported image with async thumbnail loading and remove action.
 private struct ThumbnailView: View {
     let imageURL: URL
     let canRemove: Bool
@@ -170,6 +175,7 @@ private struct ThumbnailView: View {
         .accessibilityLabel(imageURL.lastPathComponent)
     }
 
+    /// Loads a thumbnail on demand to keep scrolling smooth when many photos are selected.
     @MainActor
     private func loadThumbnailIfNeeded() async {
         guard image == nil, !isLoading else { return }
@@ -188,6 +194,11 @@ private struct ThumbnailView: View {
         isLoading = false
     }
 
+    /// Builds a thumbnail image using ImageIO when possible, with NSImage fallback.
+    /// - Parameters:
+    ///   - url: Input image URL.
+    ///   - maxPixelSize: Longest edge for the generated thumbnail.
+    /// - Returns: Thumbnail image for display, or `nil` if loading fails.
     nonisolated private static func makeThumbnail(from url: URL, maxPixelSize: Int) -> NSImage? {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {
             return NSImage(contentsOf: url)

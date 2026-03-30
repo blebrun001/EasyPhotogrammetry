@@ -3,6 +3,7 @@ import ModelIO
 import SceneKit
 import simd
 
+/// Domain errors emitted by the USDZ scaling pipeline.
 enum ScalingError: LocalizedError, Equatable {
     case invalidInput(String)
     case fileNotFound(URL)
@@ -26,17 +27,36 @@ enum ScalingError: LocalizedError, Equatable {
     }
 }
 
+/// Contract for components capable of rescaling USDZ assets.
 protocol USDZScaling: Sendable {
+    /// Scales a USDZ model by matching an uncalibrated measured distance to its real-world equivalent.
+    /// - Parameters:
+    ///   - file: Source USDZ file to transform.
+    ///   - uncalibrated: Distance measured on the model before scaling.
+    ///   - real: Target real-world distance for that same segment.
+    ///   - overwrite: Whether to overwrite the source file.
+    /// - Returns: URL of the scaled USDZ file.
+    /// - Throws: `ScalingError` values when validation, load, or write fails.
     func scaleUSDZ(file: URL, uncalibrated: Double, real: Double, overwrite: Bool) throws -> URL
 }
 
+/// Default scaling implementation with a Model I/O primary path and a SceneKit fallback.
 final class USDZScaler: USDZScaling, @unchecked Sendable {
     private let fileManager: FileManager
 
+    /// - Parameter fileManager: Injectable file manager used for persistence and tests.
     init(fileManager: FileManager = .default) {
         self.fileManager = fileManager
     }
 
+    /// Validates inputs, computes a uniform scale factor, and persists the scaled USDZ.
+    /// - Parameters:
+    ///   - file: Source USDZ file.
+    ///   - uncalibrated: Measured distance in model units.
+    ///   - real: Target real-world distance.
+    ///   - overwrite: Whether to overwrite the source file path.
+    /// - Returns: Final destination URL of the scaled USDZ.
+    /// - Throws: `ScalingError` when validation, loading, or writing fails.
     func scaleUSDZ(file: URL, uncalibrated: Double, real: Double, overwrite: Bool) throws -> URL {
         guard uncalibrated > 0, real > 0 else {
             throw ScalingError.invalidInput("Scaling values must be positive numbers.")
@@ -78,6 +98,12 @@ final class USDZScaler: USDZScaling, @unchecked Sendable {
         }
     }
 
+    /// Primary scaling path using Model I/O transforms.
+    /// - Parameters:
+    ///   - sourceURL: Source USDZ URL.
+    ///   - destinationURL: Final destination URL.
+    ///   - factor: Uniform scale factor.
+    /// - Throws: `ScalingError` when loading or export fails.
     private func scaleUsingModelIO(sourceURL: URL, destinationURL: URL, factor: Float) throws {
         let asset = MDLAsset(url: sourceURL)
         guard asset.count > 0 else {
@@ -96,6 +122,12 @@ final class USDZScaler: USDZScaling, @unchecked Sendable {
         try finalizeOutput(from: temporaryURL, to: destinationURL)
     }
 
+    /// Fallback scaling path using SceneKit when Model I/O export fails.
+    /// - Parameters:
+    ///   - sourceURL: Source USDZ URL.
+    ///   - destinationURL: Final destination URL.
+    ///   - factor: Uniform scale factor.
+    /// - Throws: `ScalingError` when scene loading or write fails.
     private func scaleUsingSceneKit(sourceURL: URL, destinationURL: URL, factor: CGFloat) throws {
         let scene: SCNScene
         do {
@@ -112,6 +144,11 @@ final class USDZScaler: USDZScaling, @unchecked Sendable {
         try finalizeOutput(from: temporaryURL, to: destinationURL)
     }
 
+    /// Atomically promotes a temporary file into the final destination.
+    /// - Parameters:
+    ///   - temporaryURL: Temporary generated USDZ file.
+    ///   - destinationURL: Final output URL.
+    /// - Throws: `ScalingError.writeFailed` when the destination cannot be updated.
     private func finalizeOutput(from temporaryURL: URL, to destinationURL: URL) throws {
         guard fileManager.fileExists(atPath: temporaryURL.path) else {
             throw ScalingError.writeFailed("The output file was not created.")
@@ -130,12 +167,19 @@ final class USDZScaler: USDZScaling, @unchecked Sendable {
         }
     }
 
+    /// Creates a temporary URL near the destination so move operations stay on the same volume.
+    /// - Parameter destinationURL: Target output URL.
+    /// - Returns: Temporary sibling URL ending in `.usdz`.
     private func makeTemporaryOutputURL(near destinationURL: URL) -> URL {
         destinationURL
             .deletingLastPathComponent()
             .appendingPathComponent(".tmp_scaled_\(UUID().uuidString).usdz")
     }
 
+    /// Applies a uniform scale to a SceneKit node hierarchy.
+    /// - Parameters:
+    ///   - factor: Multiplicative factor.
+    ///   - root: Root node to scale recursively.
     private func applyScale(_ factor: CGFloat, to root: SCNNode) {
         root.scale = SCNVector3(root.scale.x * factor, root.scale.y * factor, root.scale.z * factor)
 
@@ -144,12 +188,20 @@ final class USDZScaler: USDZScaling, @unchecked Sendable {
         }
     }
 
+    /// Applies a uniform scale to each root object of a Model I/O asset.
+    /// - Parameters:
+    ///   - factor: Multiplicative factor.
+    ///   - asset: Asset containing all objects to transform.
     private func applyScale(_ factor: Float, to asset: MDLAsset) {
         for index in 0..<asset.count {
             applyScaleRecursively(factor, to: asset.object(at: index))
         }
     }
 
+    /// Recursively multiplies each object's transform matrix by a uniform scale matrix.
+    /// - Parameters:
+    ///   - factor: Multiplicative factor.
+    ///   - object: Current object in the recursion.
     private func applyScaleRecursively(_ factor: Float, to object: MDLObject) {
         let transform = (object.transform as? MDLTransform) ?? MDLTransform()
         let scaleMatrix = uniformScaleMatrix(factor)
@@ -161,6 +213,9 @@ final class USDZScaler: USDZScaling, @unchecked Sendable {
         }
     }
 
+    /// Builds a 4x4 uniform scale matrix.
+    /// - Parameter factor: Uniform scale factor.
+    /// - Returns: Matrix suitable for post-multiplying object transforms.
     private func uniformScaleMatrix(_ factor: Float) -> simd_float4x4 {
         simd_float4x4(
             SIMD4<Float>(factor, 0, 0, 0),

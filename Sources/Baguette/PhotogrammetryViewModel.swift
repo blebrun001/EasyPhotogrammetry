@@ -1,6 +1,7 @@
 import Foundation
 import RealityKit
 
+/// User-facing quality presets mapped to Object Capture detail levels.
 enum ModelQuality: String, CaseIterable, Identifiable {
     case low
     case normal
@@ -8,6 +9,7 @@ enum ModelQuality: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    /// Full display label used by the quality picker.
     var label: String {
         switch self {
         case .low:
@@ -19,6 +21,7 @@ enum ModelQuality: String, CaseIterable, Identifiable {
         }
     }
 
+    /// Compact label used when horizontal space is constrained.
     var shortLabel: String {
         switch self {
         case .low:
@@ -30,6 +33,7 @@ enum ModelQuality: String, CaseIterable, Identifiable {
         }
     }
 
+    /// RealityKit detail level associated with this quality preset.
     var detail: PhotogrammetrySession.Request.Detail {
         switch self {
         case .low:
@@ -45,6 +49,7 @@ enum ModelQuality: String, CaseIterable, Identifiable {
 /// Main UI state holder for drag-and-drop and model generation flow.
 @MainActor
 final class PhotogrammetryViewModel: ObservableObject {
+    /// Short-lived feedback message displayed as a transient top banner.
     struct EphemeralFeedback: Equatable, Identifiable {
         let id = UUID()
         let message: String
@@ -86,6 +91,7 @@ final class PhotogrammetryViewModel: ObservableObject {
     private var scaledModelURL: URL?
     private var prewarmGeneration: PrewarmGeneration?
 
+    /// Tracks a high-quality generation started ahead of explicit user confirmation.
     private struct PrewarmGeneration {
         let token: UUID
         let imageSnapshot: [URL]
@@ -96,6 +102,11 @@ final class PhotogrammetryViewModel: ObservableObject {
         var isPromoted = false
     }
 
+    /// - Parameters:
+    ///   - service: Photogrammetry service used to generate USDZ models.
+    ///   - scalingUseCase: Use case in charge of validating and executing scale operations.
+    ///   - isPhotogrammetrySupported: Capability check for current machine.
+    ///   - fileManager: File-system dependency used when exporting models.
     init(
         service: PhotogrammetryServicing,
         scalingUseCase: ScalingUseCase = DefaultScalingUseCase(),
@@ -112,6 +123,7 @@ final class PhotogrammetryViewModel: ObservableObject {
         }
     }
 
+    /// Indicates whether generation can start based on support, selected images, and current state.
     var canGenerateModel: Bool {
         guard isPhotogrammetrySupported() else { return false }
         guard !droppedImageURLs.isEmpty else { return false }
@@ -123,6 +135,7 @@ final class PhotogrammetryViewModel: ObservableObject {
         return true
     }
 
+    /// Indicates whether an in-flight generation can be cancelled.
     var canCancelGeneration: Bool {
         if case .processing = state {
             return true
@@ -130,6 +143,7 @@ final class PhotogrammetryViewModel: ObservableObject {
         return false
     }
 
+    /// Indicates whether the user can import new images in the current state.
     var canImportImages: Bool {
         guard isPhotogrammetrySupported() else { return false }
         if case .processing = state {
@@ -138,10 +152,12 @@ final class PhotogrammetryViewModel: ObservableObject {
         return true
     }
 
+    /// Indicates whether selected images can be cleared.
     var canClearSelection: Bool {
         !droppedImageURLs.isEmpty && canImportImages
     }
 
+    /// Most recent output URL, preferring scaled outputs over raw generated outputs.
     var outputURL: URL? {
         if let scaledModelURL {
             return scaledModelURL
@@ -155,10 +171,12 @@ final class PhotogrammetryViewModel: ObservableObject {
         return nil
     }
 
+    /// Convenience flag indicating whether at least one photo has been imported.
     var hasImportedImages: Bool {
         !droppedImageURLs.isEmpty
     }
 
+    /// Indicates whether a photogrammetry model has been generated in the current session.
     var hasGeneratedPhotogrammetryModel: Bool {
         if generatedModelURL != nil {
             return true
@@ -169,6 +187,7 @@ final class PhotogrammetryViewModel: ObservableObject {
         return false
     }
 
+    /// Indicates whether scaling can start with the current inputs.
     var canScaleModel: Bool {
         guard !isScaling else { return false }
         guard selectedScaleFileURL != nil else { return false }
@@ -182,16 +201,22 @@ final class PhotogrammetryViewModel: ObservableObject {
         return true
     }
 
+    /// Opens the file importer if importing is currently allowed.
     func presentImportPicker() {
         guard canImportImages else { return }
         isImportPickerPresented = true
     }
 
+    /// Handles imported image URLs and merges/replaces them according to import behavior.
+    /// - Parameters:
+    ///   - urls: Imported image URLs.
+    ///   - behavior: Merge strategy for incoming URLs.
     func handleImportedImageURLs(_ urls: [URL], behavior: ImportBehavior = .append) {
         guard canImportImages else { return }
         setImages(urls, behavior: behavior)
     }
 
+    /// Clears current selection and resets generation/scaling state.
     func clearSelection() {
         guard canClearSelection else { return }
         invalidatePrewarm(cleanupOutput: true)
@@ -207,6 +232,8 @@ final class PhotogrammetryViewModel: ObservableObject {
         showEphemeralFeedback("Photo selection has been successfully cleared.")
     }
 
+    /// Removes one image from the selection and resets derived outputs.
+    /// - Parameter url: Image URL to remove.
     func removeImage(_ url: URL) {
         guard canImportImages else { return }
         guard let index = droppedImageURLs.firstIndex(of: url) else { return }
@@ -225,6 +252,7 @@ final class PhotogrammetryViewModel: ObservableObject {
         state = droppedImageURLs.isEmpty ? .idle : .ready
     }
 
+    /// Starts generation or promotes an existing high-quality prewarm generation.
     func generateModel() {
         guard canGenerateModel else { return }
         generationTask?.cancel()
@@ -253,6 +281,7 @@ final class PhotogrammetryViewModel: ObservableObject {
         }
     }
 
+    /// Cancels active generation and updates state to cancelled.
     func cancelGeneration() {
         guard canCancelGeneration else { return }
         generationTask?.cancel()
@@ -267,6 +296,9 @@ final class PhotogrammetryViewModel: ObservableObject {
         showEphemeralFeedback("3D model generation has been cancelled.")
     }
 
+    /// Saves the current output model to a destination URL selected by the user.
+    /// - Parameter destinationURL: User-selected destination path (extension may be omitted).
+    /// - Throws: Any file-system error while replacing/copying the file.
     func saveGeneratedModel(to destinationURL: URL) throws {
         guard let sourceURL = outputURL else { return }
 
@@ -284,14 +316,17 @@ final class PhotogrammetryViewModel: ObservableObject {
         showEphemeralFeedback("3D model has been successfully saved.")
     }
 
+    /// Converts import errors into user-facing processing state.
     func handleImportFailure(_ error: Error) {
         state = .failed(message: "Unable to import images: \(error.localizedDescription)")
     }
 
+    /// Converts save errors into user-facing processing state.
     func handleSaveFailure(_ error: Error) {
         state = .failed(message: "Unable to save model: \(error.localizedDescription)")
     }
 
+    /// Validates and executes model scaling asynchronously.
     func scaleModel() {
         guard canScaleModel else { return }
         scalingTask?.cancel()
@@ -333,11 +368,15 @@ final class PhotogrammetryViewModel: ObservableObject {
         }
     }
 
+    /// Applies measured distance from SceneKit into the uncalibrated input field.
+    /// - Parameter distance: Measured model distance.
     func applyMeasuredUncalibratedDistance(_ distance: Double) {
         guard distance.isFinite, distance > 0 else { return }
         uncalibratedMeasurement = String(format: "%.6f", distance)
     }
 
+    /// Handles measurement updates coming from the SceneKit measurement view.
+    /// - Parameter update: Latest measurement update snapshot.
     func handleMeasurementUpdate(_ update: MeasurementUpdate) {
         measurementPhase = update.phase
 
@@ -349,6 +388,8 @@ final class PhotogrammetryViewModel: ObservableObject {
         }
     }
 
+    /// Resets measurement phase and optionally clears the uncalibrated value.
+    /// - Parameter clearUncalibrated: Whether to clear `uncalibratedMeasurement`.
     func resetMeasurementState(clearUncalibrated: Bool) {
         measurementPhase = .idle
         if clearUncalibrated {
@@ -356,6 +397,7 @@ final class PhotogrammetryViewModel: ObservableObject {
         }
     }
 
+    /// Runs generation against the current image selection and updates progress/state.
     private func runGeneration() async {
         guard !Task.isCancelled else { return }
 
@@ -402,10 +444,15 @@ final class PhotogrammetryViewModel: ObservableObject {
         generationTask = nil
     }
 
+    /// Clamps progress values into the `[0, 1]` range.
     private static func clampProgress(_ value: Double) -> Double {
         min(1, max(0, value))
     }
 
+    /// Filters/merges imported URLs, resets derived state, and optionally starts high-quality prewarm.
+    /// - Parameters:
+    ///   - urls: Imported image URLs.
+    ///   - behavior: Merge strategy for incoming URLs.
     private func setImages(_ urls: [URL], behavior: ImportBehavior) {
         let filtered = urls.filter(SupportedImageFormat.isSupported)
         guard !filtered.isEmpty else {
@@ -433,6 +480,10 @@ final class PhotogrammetryViewModel: ObservableObject {
         maybeStartPrewarmGeneration()
     }
 
+    /// Reacts to quality changes by starting or invalidating high-quality prewarm generation.
+    /// - Parameters:
+    ///   - oldValue: Previous quality value.
+    ///   - newValue: Newly selected quality value.
     private func handleSelectedQualityChange(from oldValue: ModelQuality, to newValue: ModelQuality) {
         guard canImportImages else { return }
 
@@ -444,6 +495,8 @@ final class PhotogrammetryViewModel: ObservableObject {
         invalidatePrewarm(cleanupOutput: true)
     }
 
+    /// Starts a detached high-quality generation to reduce perceived latency on Generate.
+    /// - Parameter forceRestart: Whether to restart even when snapshot did not change.
     private func maybeStartPrewarmGeneration(forceRestart: Bool = false) {
         guard selectedQuality == .high else { return }
         guard !droppedImageURLs.isEmpty else { return }
@@ -497,7 +550,6 @@ final class PhotogrammetryViewModel: ObservableObject {
                     self.handlePrewarmSuccess(token: token, outputURL: outputURL)
                 }
             } catch is CancellationError {
-                // no-op
             } catch {
                 await MainActor.run {
                     self.handlePrewarmFailure(token: token, error: error)
@@ -507,6 +559,8 @@ final class PhotogrammetryViewModel: ObservableObject {
         prewarmGeneration = generation
     }
 
+    /// Promotes a completed/in-flight prewarm generation into the active generation UI flow.
+    /// - Parameter token: Token identifying the prewarm generation to promote.
     private func promotePrewarmGeneration(token: UUID) {
         guard var prewarmGeneration, prewarmGeneration.token == token, let task = prewarmGeneration.task else { return }
         prewarmGeneration.isPromoted = true
@@ -519,6 +573,10 @@ final class PhotogrammetryViewModel: ObservableObject {
         }
     }
 
+    /// Stores latest prewarm progress and updates visible progress when promoted.
+    /// - Parameters:
+    ///   - token: Generation token.
+    ///   - progress: Latest progress value.
     private func handlePrewarmProgress(token: UUID, progress: Double) {
         guard var prewarmGeneration, prewarmGeneration.token == token else { return }
         let clampedProgress = Self.clampProgress(progress)
@@ -534,6 +592,10 @@ final class PhotogrammetryViewModel: ObservableObject {
         state = .processing(progress: nextProgress)
     }
 
+    /// Handles successful prewarm completion and finalizes state when promoted.
+    /// - Parameters:
+    ///   - token: Generation token.
+    ///   - outputURL: Generated output URL.
     private func handlePrewarmSuccess(token: UUID, outputURL: URL) {
         guard var prewarmGeneration, prewarmGeneration.token == token else {
             service.cleanupGeneratedModel(at: outputURL)
@@ -550,6 +612,10 @@ final class PhotogrammetryViewModel: ObservableObject {
         clearPrewarmGeneration(cleanupOutput: false)
     }
 
+    /// Handles prewarm failure and surfaces errors only when prewarm was promoted.
+    /// - Parameters:
+    ///   - token: Generation token.
+    ///   - error: Underlying generation error.
     private func handlePrewarmFailure(token: UUID, error: Error) {
         guard let prewarmGeneration, prewarmGeneration.token == token else { return }
 
@@ -561,11 +627,15 @@ final class PhotogrammetryViewModel: ObservableObject {
         clearPrewarmGeneration(cleanupOutput: false)
     }
 
+    /// Invalidates current prewarm generation if one exists.
+    /// - Parameter cleanupOutput: Whether to delete produced prewarm output.
     private func invalidatePrewarm(cleanupOutput: Bool) {
         guard prewarmGeneration != nil else { return }
         clearPrewarmGeneration(cleanupOutput: cleanupOutput)
     }
 
+    /// Cancels and clears prewarm tasks, optionally cleaning generated output.
+    /// - Parameter cleanupOutput: Whether to delete produced prewarm output.
     private func clearPrewarmGeneration(cleanupOutput: Bool) {
         guard let prewarmGeneration else { return }
 
@@ -579,6 +649,8 @@ final class PhotogrammetryViewModel: ObservableObject {
         service.cleanupGeneratedModel(at: outputURL)
     }
 
+    /// Applies successful generation output to state and resets scale-related transient data.
+    /// - Parameter outputURL: Generated model URL.
     private func completeGeneration(with outputURL: URL) {
         prewarmCatchUpTask?.cancel()
         prewarmCatchUpTask = nil
@@ -592,6 +664,10 @@ final class PhotogrammetryViewModel: ObservableObject {
         showEphemeralFeedback("3D model has been successfully generated.")
     }
 
+    /// Smoothly catches up visible progress to the latest prewarm progress when promoted.
+    /// - Parameters:
+    ///   - targetProgress: Initial target progress.
+    ///   - token: Generation token used to ensure task relevance.
     private func startPrewarmProgressCatchUp(to targetProgress: Double, token: UUID) {
         let clampedTarget = Self.clampProgress(targetProgress)
         guard clampedTarget > 0 else { return }
@@ -632,17 +708,24 @@ final class PhotogrammetryViewModel: ObservableObject {
         }
     }
 
+    /// Updates visible generation progress after clamping and cancellation checks.
+    /// - Parameter progress: Raw progress value.
     private func updateGenerationProgress(_ progress: Double) {
         guard !Task.isCancelled else { return }
         state = .processing(progress: Self.clampProgress(progress))
     }
 
+    /// Immediately clears the currently displayed transient feedback banner.
     func clearEphemeralFeedback() {
         feedbackDismissTask?.cancel()
         feedbackDismissTask = nil
         ephemeralFeedback = nil
     }
 
+    /// Shows a transient feedback message and auto-clears it after a delay.
+    /// - Parameters:
+    ///   - message: Message to display.
+    ///   - durationNanoseconds: Visibility duration before auto-dismiss.
     private func showEphemeralFeedback(_ message: String, durationNanoseconds: UInt64 = 2_500_000_000) {
         feedbackDismissTask?.cancel()
         ephemeralFeedback = EphemeralFeedback(message: message)
@@ -656,6 +739,9 @@ final class PhotogrammetryViewModel: ObservableObject {
         }
     }
 
+    /// De-duplicates URLs while preserving their first-seen order.
+    /// - Parameter urls: Input URL list.
+    /// - Returns: Unique URL list preserving initial ordering.
     private static func uniquePreservingOrder(_ urls: [URL]) -> [URL] {
         var seen: Set<URL> = []
         var result: [URL] = []
@@ -667,6 +753,7 @@ final class PhotogrammetryViewModel: ObservableObject {
         return result
     }
 
+    /// Cancels all in-flight tasks to avoid leaked background work on deallocation.
     deinit {
         generationTask?.cancel()
         scalingTask?.cancel()
@@ -677,15 +764,18 @@ final class PhotogrammetryViewModel: ObservableObject {
     }
 }
 
+/// Describes how a new import batch should be merged with the current image selection.
 enum ImportBehavior {
     case append
     case replace
 }
 
+/// Minimal file-system API injected into the view model for easier testing.
 protocol FileManaging {
     func fileExists(atPath path: String) -> Bool
     func removeItem(at URL: URL) throws
     func copyItem(at srcURL: URL, to dstURL: URL) throws
 }
 
+/// Production `FileManaging` conformance.
 extension FileManager: FileManaging {}

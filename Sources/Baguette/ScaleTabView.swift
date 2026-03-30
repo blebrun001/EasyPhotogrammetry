@@ -1,5 +1,6 @@
 import SwiftUI
 
+/// Scale tab combining interactive distance measurement and model scaling controls.
 struct ScaleTabView: View {
     @ObservedObject var viewModel: PhotogrammetryViewModel
     @State private var isMeasurementModeEnabled = false
@@ -64,6 +65,7 @@ struct ScaleTabView: View {
         }
     }
 
+    /// Main scaling action button with dynamic disabled/help states.
     private var actionButton: some View {
         Button {
             viewModel.scaleModel()
@@ -79,12 +81,14 @@ struct ScaleTabView: View {
         .help(scaleButtonHelpText)
     }
 
+    /// Indicates whether a measured uncalibrated distance is still missing.
     private var isUncalibratedMeasurementMissing: Bool {
         viewModel.uncalibratedMeasurement
             .trimmingCharacters(in: .whitespacesAndNewlines)
             .isEmpty
     }
 
+    /// Label for the measurement button based on current point selection progress.
     private var measurementButtonTitle: String {
         if measurementUpdate.pointCount >= 2 {
             return "Restart scaling"
@@ -97,6 +101,7 @@ struct ScaleTabView: View {
         return isMeasurementModeEnabled ? "Select point 1" : "Start measure"
     }
 
+    /// Contextual help text for the measurement button.
     private var measurementButtonHelpText: String {
         if measurementUpdate.pointCount >= 2 {
             return "Clear current points and start a new distance measurement."
@@ -109,6 +114,7 @@ struct ScaleTabView: View {
         return "Enable measurement mode, then click on the model to place the first point."
     }
 
+    /// Help text for the 3D measurement surface.
     private var measurementSurfaceHelpText: String {
         if isMeasurementModeEnabled {
             return "Click two points on the model to measure a distance."
@@ -117,6 +123,7 @@ struct ScaleTabView: View {
         return "Click Start measure to pick points. Click the model to toggle wireframe view."
     }
 
+    /// Help text for the scaling execution button.
     private var scaleButtonHelpText: String {
         if isUncalibratedMeasurementMissing {
             return "Measure the model first to set the uncalibrated distance."
@@ -125,6 +132,7 @@ struct ScaleTabView: View {
         return "Scale the model using measured distance and real-world centimeters."
     }
 
+    /// Starts measurement mode or restarts point selection when a full measurement already exists.
     private func handleMeasurementButtonTap() {
         if measurementUpdate.pointCount >= 2 {
             restartScalingSelection()
@@ -135,11 +143,14 @@ struct ScaleTabView: View {
         sendEditingCommand(.none)
     }
 
+    /// Sends an editing command with a fresh token so the representable applies it once.
+    /// - Parameter command: Editing command to dispatch to the SceneKit view.
     private func sendEditingCommand(_ command: MeasurementEditingCommand) {
         editingCommand = command
         editingCommandToken = UUID()
     }
 
+    /// Clears existing measured points and starts a new measurement session.
     private func restartScalingSelection() {
         isMeasurementModeEnabled = true
         measurementUpdate = .idle
@@ -148,6 +159,7 @@ struct ScaleTabView: View {
         viewModel.scalingResultMessage = ""
     }
 
+    /// Resets local measurement UI state when selected model changes.
     private func resetMeasurementUI() {
         isMeasurementModeEnabled = false
         measurementUpdate = .idle
