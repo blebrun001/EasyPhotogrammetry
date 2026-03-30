@@ -23,8 +23,8 @@ struct DefaultScalingUseCase: ScalingUseCase {
             throw ScalingError.invalidInput("Please select a USDZ file.")
         }
 
-        guard let realValue = Double(real),
-              let uncalibratedValue = Double(uncalibrated),
+        guard let realValue = Self.parseMeasurementValue(real),
+              let uncalibratedValue = Self.parseMeasurementValue(uncalibrated),
               realValue > 0,
               uncalibratedValue > 0 else {
             throw ScalingError.invalidInput("Please provide valid positive numeric values for both measurements.")
@@ -53,6 +53,25 @@ struct DefaultScalingUseCase: ScalingUseCase {
                 }
             }
         }
+    }
+
+    static func parseMeasurementValue(_ rawValue: String) -> Double? {
+        let trimmed = rawValue.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return nil }
+
+        if let value = Double(trimmed) {
+            return value
+        }
+
+        let normalized = trimmed.replacingOccurrences(of: ",", with: ".")
+        if let value = Double(normalized) {
+            return value
+        }
+
+        let formatter = NumberFormatter()
+        formatter.locale = Locale.current
+        formatter.numberStyle = .decimal
+        return formatter.number(from: trimmed)?.doubleValue
     }
 }
 

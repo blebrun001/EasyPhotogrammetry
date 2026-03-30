@@ -169,8 +169,13 @@ final class PhotogrammetryViewModel: ObservableObject {
     var canScaleModel: Bool {
         guard !isScaling else { return false }
         guard selectedScaleFileURL != nil else { return false }
-        guard let realValue = Double(realMeasurement), realValue > 0 else { return false }
-        guard let uncalibratedValue = Double(uncalibratedMeasurement), uncalibratedValue > 0 else { return false }
+        guard let realValue = DefaultScalingUseCase.parseMeasurementValue(realMeasurement), realValue > 0 else {
+            return false
+        }
+        guard let uncalibratedValue = DefaultScalingUseCase.parseMeasurementValue(uncalibratedMeasurement),
+              uncalibratedValue > 0 else {
+            return false
+        }
         return true
     }
 
