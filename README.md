@@ -4,14 +4,14 @@
 
 # Baguette
 
-Application macOS (SwiftUI + RealityKit) pour générer un modèle 3D `.usdz` à partir d'images (Apple Object Capture).
+macOS app (SwiftUI + RealityKit) to generate a `.usdz` 3D model from images (Apple Object Capture).
 
-## Prérequis
+## Requirements
 
 - macOS 26+
 - Machine compatible `PhotogrammetrySession`
 
-## Lancer
+## Run
 
 ```bash
 swift run
@@ -29,6 +29,6 @@ swift test
 xcodebuild -project Baguette.xcodeproj -scheme Baguette -configuration Debug -destination 'platform=macOS' build
 ```
 
-## Licence
+## License
 
-GNU GPL v3.0. Voir [LICENSE](LICENSE).
+GNU GPL v3.0. See [LICENSE](LICENSE).
