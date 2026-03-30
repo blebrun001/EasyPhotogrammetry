@@ -53,6 +53,11 @@ struct SurfaceMeasurementView: NSViewRepresentable {
             context.coordinator.handlePick(at: location, in: view)
         }
 
+        view.onModelTap = { [weak view] _ in
+            guard let view else { return }
+            context.coordinator.handleModelTap(in: view)
+        }
+
         context.coordinator.configure(sceneIn: view, for: modelURL)
         context.coordinator.setMeasurementMode(isMeasurementModeEnabled, in: view)
 
@@ -79,11 +84,19 @@ struct SurfaceMeasurementView: NSViewRepresentable {
     static func dismantleNSView(_ nsView: PointPickingSCNView, coordinator: Coordinator) {
         nsView.onHover = nil
         nsView.onPick = nil
+        nsView.onModelTap = nil
         nsView.scene = nil
     }
 
     @MainActor
     final class Coordinator {
+        private struct MaterialSnapshot {
+            let fillMode: SCNFillMode
+            let diffuseContents: Any?
+            let emissionContents: Any?
+            let lightingModel: SCNMaterial.LightingModel
+        }
+
         var currentModelURL: URL?
         var lastMeasurementMode = false
         var lastEditingCommandToken = UUID()
@@ -94,6 +107,8 @@ struct SurfaceMeasurementView: NSViewRepresentable {
         private var markerNodes: [SCNNode] = []
         private var segmentNode: SCNNode?
         private var hoverNode: SCNNode?
+        private var isWireframeEnabled = false
+        private var materialSnapshots: [ObjectIdentifier: MaterialSnapshot] = [:]
 
         init(onMeasurementUpdated: @escaping (_ update: MeasurementUpdate) -> Void) {
             self.onMeasurementUpdated = onMeasurementUpdated
@@ -118,6 +133,9 @@ struct SurfaceMeasurementView: NSViewRepresentable {
                         node.categoryBitMask = SurfaceMeasurementView.modelHitCategoryMask
                     }
                 }
+                isWireframeEnabled = false
+                materialSnapshots.removeAll()
+                applyModelFillMode(in: view)
             } catch {
                 view.scene = SCNScene()
             }
@@ -189,6 +207,13 @@ struct SurfaceMeasurementView: NSViewRepresentable {
 
             rebuildMeasurementNodes(in: view)
             emitUpdate()
+            view.needsDisplay = true
+        }
+
+        func handleModelTap(in view: PointPickingSCNView) {
+            guard !lastMeasurementMode else { return }
+            isWireframeEnabled.toggle()
+            applyModelFillMode(in: view)
             view.needsDisplay = true
         }
 
@@ -284,6 +309,67 @@ struct SurfaceMeasurementView: NSViewRepresentable {
             let dz = Double(a.z - b.z)
             return (dx * dx + dy * dy + dz * dz).squareRoot()
         }
+
+        private func applyModelFillMode(in view: PointPickingSCNView) {
+            let fillMode: SCNFillMode = isWireframeEnabled ? .lines : .fill
+            let isDarkMode = view.isDarkAppearance
+            let darkModeWireframeColor = NSColor(calibratedWhite: 0.95, alpha: 1)
+            view.scene?.rootNode.enumerateChildNodes { node, _ in
+                guard
+                    node.categoryBitMask == SurfaceMeasurementView.modelHitCategoryMask,
+                    let geometry = node.geometry
+                else { return }
+
+                if geometry.materials.isEmpty {
+                    let material = SCNMaterial()
+                    if isWireframeEnabled {
+                        material.fillMode = .lines
+                        if isDarkMode {
+                            material.lightingModel = .constant
+                            material.diffuse.contents = darkModeWireframeColor
+                            material.emission.contents = darkModeWireframeColor
+                        }
+                    } else {
+                        material.fillMode = .fill
+                    }
+                    geometry.materials = [material]
+                    return
+                }
+
+                geometry.materials.forEach { material in
+                    let key = ObjectIdentifier(material)
+
+                    if isWireframeEnabled {
+                        if materialSnapshots[key] == nil {
+                            materialSnapshots[key] = MaterialSnapshot(
+                                fillMode: material.fillMode,
+                                diffuseContents: material.diffuse.contents,
+                                emissionContents: material.emission.contents,
+                                lightingModel: material.lightingModel
+                            )
+                        }
+
+                        material.fillMode = .lines
+                        if isDarkMode {
+                            material.lightingModel = .constant
+                            material.diffuse.contents = darkModeWireframeColor
+                            material.emission.contents = darkModeWireframeColor
+                        }
+                    } else if let snapshot = materialSnapshots[key] {
+                        material.fillMode = snapshot.fillMode
+                        material.diffuse.contents = snapshot.diffuseContents
+                        material.emission.contents = snapshot.emissionContents
+                        material.lightingModel = snapshot.lightingModel
+                    } else {
+                        material.fillMode = fillMode
+                    }
+                }
+            }
+
+            if !isWireframeEnabled {
+                materialSnapshots.removeAll()
+            }
+        }
     }
 }
 
@@ -291,8 +377,10 @@ final class PointPickingSCNView: SCNView {
     var isMeasurementModeEnabled = false
     var onHover: ((NSPoint) -> Void)?
     var onPick: ((NSPoint) -> Void)?
+    var onModelTap: ((NSPoint) -> Void)?
 
     private var trackingAreaRef: NSTrackingArea?
+    private var mouseDownLocation: NSPoint?
 
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -322,13 +410,33 @@ final class PointPickingSCNView: SCNView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        let location = convert(event.locationInWindow, from: nil)
+
         guard isMeasurementModeEnabled else {
+            mouseDownLocation = location
             super.mouseDown(with: event)
             return
         }
 
-        let location = convert(event.locationInWindow, from: nil)
         onPick?(location)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        let location = convert(event.locationInWindow, from: nil)
+        defer { mouseDownLocation = nil }
+
+        guard !isMeasurementModeEnabled else {
+            super.mouseUp(with: event)
+            return
+        }
+
+        super.mouseUp(with: event)
+
+        guard let mouseDownLocation else { return }
+        let movement = hypot(location.x - mouseDownLocation.x, location.y - mouseDownLocation.y)
+        guard movement < 3 else { return }
+        guard meshIntersection(at: location) != nil else { return }
+        onModelTap?(location)
     }
 
     func meshIntersection(at point: NSPoint) -> SCNHitTestResult? {
@@ -358,5 +466,9 @@ final class PointPickingSCNView: SCNView {
         let dy2 = dy * dy
         let dz2 = dz * dz
         return dx2 + dy2 + dz2
+    }
+
+    var isDarkAppearance: Bool {
+        effectiveAppearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
     }
 }
