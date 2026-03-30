@@ -109,3 +109,8 @@ To regenerate PNG renders and the `.icns` fallback:
 - `.usdz` output is generated in a temporary directory;
 - each new generation creates a new temporary input/output workspace;
 - no automated test suite yet.
+
+## License
+
+This project is licensed under the GNU General Public License v3.0.
+See [LICENSE](LICENSE).
