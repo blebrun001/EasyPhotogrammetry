@@ -416,13 +416,11 @@ private struct ImportPhotosTabView: View {
     ]
 
     var body: some View {
-        Form {
-            Section("Import") {
-                importSection
-            }
+        VStack(spacing: 10) {
+            importSection
         }
-        .formStyle(.grouped)
         .padding(16)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .fileImporter(
             isPresented: $viewModel.isImportPickerPresented,
             allowedContentTypes: supportedContentTypes,
@@ -440,6 +438,7 @@ private struct ImportPhotosTabView: View {
     private var importSection: some View {
         VStack(alignment: .leading, spacing: 10) {
             dropZoneContainer
+                .frame(maxHeight: .infinity)
 
             if !viewModel.droppedImageURLs.isEmpty {
                 HStack(spacing: 8) {
@@ -461,14 +460,24 @@ private struct ImportPhotosTabView: View {
     private var dropZone: some View {
         if viewModel.droppedImageURLs.isEmpty {
             VStack(spacing: 8) {
-                Image(systemName: "tray.and.arrow.down")
+                Text("drad-and-drop images here or clic")
                     .font(.title3)
                     .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
             }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
         } else {
-            VStack(alignment: .leading, spacing: 8) {
+            GeometryReader { proxy in
+                let spacing: CGFloat = 10
+                let minItemWidth: CGFloat = 120
+                let columnCount = max(Int((proxy.size.width + spacing) / (minItemWidth + spacing)), 1)
+                let columns = Array(
+                    repeating: GridItem(.flexible(minimum: minItemWidth), spacing: spacing, alignment: .top),
+                    count: columnCount
+                )
+
                 ScrollView {
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 72), spacing: 8)], spacing: 8) {
+                    LazyVGrid(columns: columns, spacing: spacing) {
                         ForEach(viewModel.droppedImageURLs, id: \.self) { imageURL in
                             ThumbnailView(
                                 imageURL: imageURL,
@@ -477,9 +486,10 @@ private struct ImportPhotosTabView: View {
                             )
                         }
                     }
+                    .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(.vertical, 2)
                 }
-                .frame(minHeight: 88, maxHeight: 220)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding(.horizontal, 2)
@@ -488,7 +498,16 @@ private struct ImportPhotosTabView: View {
 
     private var dropZoneContainer: some View {
         dropZone
-            .frame(maxWidth: .infinity, minHeight: 130)
+            .frame(maxWidth: .infinity, minHeight: 130, maxHeight: .infinity)
+            .padding(12)
+            .background(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .fill(viewModel.isDropTargeted ? Color.accentColor.opacity(0.10) : Color.secondary.opacity(0.08))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .stroke(viewModel.isDropTargeted ? Color.accentColor : Color.secondary.opacity(0.35), lineWidth: 1)
+            )
             .contentShape(Rectangle())
             .onTapGesture {
                 viewModel.presentImportPicker()
@@ -625,10 +644,11 @@ private struct ThumbnailView: View {
                             Image(systemName: "photo")
                                 .foregroundStyle(.secondary)
                         }
-                    }
+                }
             }
         }
-        .frame(width: 72, height: 72)
+        .aspectRatio(1, contentMode: .fit)
+        .frame(maxWidth: .infinity)
         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
         .overlay(alignment: .topTrailing) {
             Button(action: onRemove) {
@@ -655,7 +675,7 @@ private struct ThumbnailView: View {
 
         let loaded = await withCheckedContinuation { continuation in
             DispatchQueue.global(qos: .utility).async {
-                continuation.resume(returning: Self.makeThumbnail(from: imageURL, maxPixelSize: 200))
+                continuation.resume(returning: Self.makeThumbnail(from: imageURL, maxPixelSize: 600))
             }
         }
 
