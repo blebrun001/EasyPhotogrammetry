@@ -77,6 +77,7 @@ final class PhotogrammetryViewModel: ObservableObject {
     @Published var scalingResultMessage: String = ""
     @Published private(set) var isScaling = false
     @Published private(set) var measurementPhase: MeasurementPhase = .idle
+    @Published private(set) var scalingSuccessCount = 0
 
     private let service: PhotogrammetryServicing
     private let scalingUseCase: ScalingUseCase
@@ -156,6 +157,24 @@ final class PhotogrammetryViewModel: ObservableObject {
         outputURL != nil
     }
 
+    var hasImportedImages: Bool {
+        !droppedImageURLs.isEmpty
+    }
+
+    var hasGeneratedPhotogrammetryModel: Bool {
+        if generatedModelURL != nil {
+            return true
+        }
+        if case .completed = state {
+            return true
+        }
+        return false
+    }
+
+    var hasExportableModel: Bool {
+        outputURL != nil
+    }
+
     var canScaleModel: Bool {
         guard !isScaling else { return false }
         guard selectedScaleFileURL != nil else { return false }
@@ -213,7 +232,23 @@ final class PhotogrammetryViewModel: ObservableObject {
         droppedImageURLs = []
         generatedModelURL = nil
         scaledModelURL = nil
+        scalingSuccessCount = 0
         state = .idle
+    }
+
+    func removeImage(_ url: URL) {
+        guard canImportImages else { return }
+        guard let index = droppedImageURLs.firstIndex(of: url) else { return }
+
+        generationTask?.cancel()
+        generationTask = nil
+
+        droppedImageURLs.remove(at: index)
+        generatedModelURL = nil
+        scaledModelURL = nil
+        scalingSuccessCount = 0
+        resetMeasurementState(clearUncalibrated: true)
+        state = droppedImageURLs.isEmpty ? .idle : .ready
     }
 
     func generateModel() {
@@ -261,6 +296,7 @@ final class PhotogrammetryViewModel: ObservableObject {
             let resultURL = try scalingUseCase.execute(request)
             scaledModelURL = resultURL
             selectedScaleFileURL = resultURL
+            scalingSuccessCount += 1
             scalingResultMessage = "Scaled model: \(resultURL.lastPathComponent)"
         } catch {
             scalingResultMessage = "Scaling error: \(error.localizedDescription)"
@@ -310,6 +346,7 @@ final class PhotogrammetryViewModel: ObservableObject {
             }
             generatedModelURL = outputURL
             scaledModelURL = nil
+            scalingSuccessCount = 0
             selectedScaleFileURL = outputURL
             scalingResultMessage = ""
             resetMeasurementState(clearUncalibrated: true)
@@ -345,6 +382,7 @@ final class PhotogrammetryViewModel: ObservableObject {
         droppedImageURLs = Self.uniquePreservingOrder(merged)
         generatedModelURL = nil
         scaledModelURL = nil
+        scalingSuccessCount = 0
         resetMeasurementState(clearUncalibrated: true)
         state = .ready
     }

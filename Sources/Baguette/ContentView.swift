@@ -1,54 +1,64 @@
 import AppKit
 import ImageIO
+import SceneKit
 import SwiftUI
 import UniformTypeIdentifiers
 
 struct ContentView: View {
     @StateObject var viewModel: PhotogrammetryViewModel
-    @State private var selectedTab: AppTab = .photos
+    @State private var selectedTab: AppTab = .importPhotos
     @State private var modelPreviewInstanceID = UUID()
 
     var body: some View {
         TabView(selection: $selectedTab) {
-            PhotosTabView(viewModel: viewModel)
+            ImportPhotosTabView(viewModel: viewModel)
                 .tabItem {
-                    Label("Photos", systemImage: "photo.on.rectangle")
+                    Label("1. Import", systemImage: "photo.on.rectangle")
                 }
-                .tag(AppTab.photos)
+                .tag(AppTab.importPhotos)
+
+            ProcessSettingsTabView(viewModel: viewModel)
+                .tabItem {
+                    Label("2. Process", systemImage: "slider.horizontal.3")
+                }
+                .tag(AppTab.process)
+                .disabled(!canAccessProcess)
 
             ScaleTabView(viewModel: viewModel)
                 .tabItem {
-                    Label("Scale", systemImage: "ruler")
+                    Label("3. Scale", systemImage: "ruler")
                 }
                 .tag(AppTab.scale)
+                .disabled(!canAccessScale)
 
-            Model3DTabView(
+            Export3DTabView(
                 modelURL: viewModel.outputURL,
                 instanceID: modelPreviewInstanceID,
                 onSaveModel: presentSavePanel(for:)
             )
-                .tabItem {
-                    Label("3D", systemImage: "cube")
-                }
-                .tag(AppTab.model3D)
-                .disabled(!viewModel.hasGeneratedModel)
-        }
-        .onChange(of: viewModel.state) { _, newState in
-            guard case .completed = newState else { return }
-            selectedTab = .model3D
-        }
-        .onChange(of: viewModel.hasGeneratedModel) { _, hasGeneratedModel in
-            if !hasGeneratedModel && selectedTab == .model3D {
-                selectedTab = .photos
+            .tabItem {
+                Label("4. Export", systemImage: "square.and.arrow.down")
             }
+            .tag(AppTab.export)
+            .disabled(!canAccessExport)
         }
         .onChange(of: selectedTab) { _, newTab in
-            if newTab == .model3D && !viewModel.hasGeneratedModel {
-                selectedTab = .photos
-            } else if newTab == .model3D {
+            if newTab == .export {
                 modelPreviewInstanceID = UUID()
             }
         }
+    }
+
+    private var canAccessProcess: Bool {
+        viewModel.hasImportedImages
+    }
+
+    private var canAccessScale: Bool {
+        viewModel.hasGeneratedPhotogrammetryModel
+    }
+
+    private var canAccessExport: Bool {
+        viewModel.hasExportableModel
     }
 
     private func presentSavePanel(for outputURL: URL) {
@@ -73,9 +83,131 @@ struct ContentView: View {
 }
 
 private enum AppTab: Hashable {
-    case photos
+    case importPhotos
+    case process
     case scale
-    case model3D
+    case export
+}
+
+private struct ProcessSettingsTabView: View {
+    @ObservedObject var viewModel: PhotogrammetryViewModel
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Form {
+                Section("Configuration") {
+                    configurationSection
+                }
+
+                Section("Status") {
+                    statusSection
+                }
+            }
+            .formStyle(.grouped)
+            .frame(maxHeight: .infinity)
+
+            HStack {
+                Spacer()
+                actionButton
+                Spacer()
+            }
+        }
+        .padding(16)
+    }
+
+    private var configurationSection: some View {
+        LabeledContent("Quality") {
+            Picker("Quality", selection: $viewModel.selectedQuality) {
+                ForEach(ModelQuality.allCases) { quality in
+                    Text(quality.label)
+                        .tag(quality)
+                }
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .disabled(!viewModel.canImportImages)
+            .help("Choose generation quality")
+        }
+    }
+
+    private var statusSection: some View {
+        let presentation = viewModel.state.presentation
+
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 8) {
+                if let symbolName = presentation.symbolName {
+                    Image(systemName: symbolName)
+                        .foregroundStyle(color(for: presentation.tone))
+                }
+
+                Text(presentation.title)
+                    .font(.headline)
+            }
+
+            if let detail = presentation.detail {
+                Text(detail)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+            }
+
+            if let progress = presentation.progress {
+                HStack(spacing: 8) {
+                    ProgressView(value: progress)
+                        .controlSize(.small)
+
+                    if let progressText = presentation.progressText {
+                        Text(progressText)
+                            .font(.caption.monospacedDigit())
+                            .foregroundStyle(.secondary)
+                    }
+                }
+            }
+        }
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("Processing Status")
+        .accessibilityValue(presentation.title)
+    }
+
+    private var actionButton: some View {
+        Group {
+            if viewModel.canCancelGeneration {
+                Button(role: .destructive) {
+                    viewModel.cancelGeneration()
+                } label: {
+                    Label("Stop", systemImage: "stop.fill")
+                }
+                .keyboardShortcut(.cancelAction)
+                .help("Stop model generation")
+                .accessibilityLabel("Stop Generation")
+                .accessibilityHint("Cancel the 3D model generation in progress")
+            } else {
+                Button {
+                    viewModel.generateModel()
+                } label: {
+                    Text("Generate")
+                        .frame(minWidth: 140)
+                }
+                .keyboardShortcut(.defaultAction)
+                .disabled(!viewModel.canGenerateModel)
+                .help("Generate a USDZ model")
+                .accessibilityLabel("Generate Model")
+                .accessibilityHint("Run Apple Object Capture with selected images")
+            }
+        }
+        .controlSize(.large)
+    }
+
+    private func color(for tone: StatusPresentation.Tone) -> Color {
+        switch tone {
+        case .secondary:
+            return .secondary
+        case .success:
+            return .green
+        case .error:
+            return .red
+        }
+    }
 }
 
 private struct ScaleTabView: View {
@@ -266,7 +398,7 @@ private struct ScaleTabView: View {
     }
 }
 
-private struct PhotosTabView: View {
+private struct ImportPhotosTabView: View {
     @ObservedObject var viewModel: PhotogrammetryViewModel
 
     private let supportedContentTypes: [UTType] = [
@@ -281,14 +413,6 @@ private struct PhotosTabView: View {
         Form {
             Section("Import") {
                 importSection
-            }
-
-            Section("Configuration") {
-                configurationSection
-            }
-
-            Section("Status") {
-                statusSection
             }
         }
         .formStyle(.grouped)
@@ -316,7 +440,7 @@ private struct PhotosTabView: View {
                     Button {
                         viewModel.clearSelection()
                     } label: {
-                        Label("Clear", systemImage: "xmark")
+                        Label("Clean all", systemImage: "xmark")
                     }
                     .disabled(!viewModel.canClearSelection)
                     .help("Clear selected images")
@@ -325,21 +449,6 @@ private struct PhotosTabView: View {
         }
         .accessibilityLabel("Import Area")
         .accessibilityHint("Drag and drop images here, or click to open the file picker")
-    }
-
-    private var configurationSection: some View {
-        LabeledContent("Quality") {
-            Picker("Quality", selection: $viewModel.selectedQuality) {
-                ForEach(ModelQuality.allCases) { quality in
-                    Text(quality.label)
-                        .tag(quality)
-                }
-            }
-            .pickerStyle(.menu)
-            .labelsHidden()
-            .disabled(!viewModel.canImportImages)
-            .help("Choose generation quality")
-        }
     }
 
     @ViewBuilder
@@ -355,7 +464,11 @@ private struct PhotosTabView: View {
                 ScrollView {
                     LazyVGrid(columns: [GridItem(.adaptive(minimum: 72), spacing: 8)], spacing: 8) {
                         ForEach(viewModel.droppedImageURLs, id: \.self) { imageURL in
-                            ThumbnailView(imageURL: imageURL)
+                            ThumbnailView(
+                                imageURL: imageURL,
+                                canRemove: viewModel.canImportImages,
+                                onRemove: { viewModel.removeImage(imageURL) }
+                            )
                         }
                     }
                     .padding(.vertical, 2)
@@ -382,86 +495,109 @@ private struct PhotosTabView: View {
                 viewModel.isDropTargeted = targeted
             }
     }
+}
 
-    private var statusSection: some View {
-        let presentation = viewModel.state.presentation
+private struct Export3DTabView: View {
+    let modelURL: URL?
+    let instanceID: UUID
+    let onSaveModel: (URL) -> Void
 
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack(spacing: 8) {
-                if let symbolName = presentation.symbolName {
-                    Image(systemName: symbolName)
-                        .foregroundStyle(color(for: presentation.tone))
-                }
+    var body: some View {
+        Form {
+            Section("Preview") {
+                ZStack {
+                    ExportModelPreview(url: modelURL)
+                        .id(instanceID)
 
-                Text(presentation.title)
-                    .font(.headline)
-            }
-
-            if let detail = presentation.detail {
-                Text(detail)
-                    .font(.subheadline)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
-            }
-
-            if let progress = presentation.progress {
-                HStack(spacing: 8) {
-                    ProgressView(value: progress)
-                        .controlSize(.small)
-
-                    if let progressText = presentation.progressText {
-                        Text(progressText)
-                            .font(.caption.monospacedDigit())
-                            .foregroundStyle(.secondary)
+                    if modelURL == nil {
+                        unavailablePlaceholder
                     }
                 }
+                .frame(maxWidth: .infinity, minHeight: 320, maxHeight: 460)
             }
 
-            HStack(spacing: 8) {
-                if viewModel.canCancelGeneration {
-                    Button(role: .destructive) {
-                        viewModel.cancelGeneration()
-                    } label: {
-                        Label("Stop", systemImage: "stop.fill")
-                    }
-                    .keyboardShortcut(.cancelAction)
-                    .help("Stop model generation")
-                    .accessibilityLabel("Stop Generation")
-                    .accessibilityHint("Cancel the 3D model generation in progress")
-                } else {
+            Section("Export") {
+                if let modelURL {
                     Button {
-                        viewModel.generateModel()
+                        onSaveModel(modelURL)
                     } label: {
-                        Text("Generate")
+                        Label("Save…", systemImage: "square.and.arrow.down")
                     }
-                    .keyboardShortcut(.defaultAction)
-                    .disabled(!viewModel.canGenerateModel)
-                    .help("Generate a USDZ model")
-                    .accessibilityLabel("Generate Model")
-                    .accessibilityHint("Run Apple Object Capture with selected images")
+                    .help("Save the generated model with a custom name")
+                    .accessibilityLabel("Save Model")
+                    .accessibilityHint("Choose where to save the generated USDZ model")
+                } else {
+                    Text("No model available for export.")
+                        .foregroundStyle(.secondary)
                 }
-
             }
         }
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel("Processing Status")
-        .accessibilityValue(presentation.title)
+        .formStyle(.grouped)
+        .padding(16)
     }
 
-    private func color(for tone: StatusPresentation.Tone) -> Color {
-        switch tone {
-        case .secondary:
-            return .secondary
-        case .success:
-            return .green
-        case .error:
-            return .red
+    private var unavailablePlaceholder: some View {
+        VStack(spacing: 10) {
+            Image(systemName: "cube.transparent")
+                .font(.system(size: 26))
+                .foregroundStyle(.secondary)
+            Text("No 3D model available yet")
+                .font(.headline)
+            Text("Generate and scale a model to enable export.")
+                .foregroundStyle(.secondary)
         }
+        .multilineTextAlignment(.center)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .padding(24)
+    }
+}
+
+private struct ExportModelPreview: NSViewRepresentable {
+    let url: URL?
+
+    final class Coordinator {
+        var currentURL: URL?
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator()
+    }
+
+    func makeNSView(context: Context) -> SCNView {
+        let view = SCNView(frame: .zero)
+        view.allowsCameraControl = true
+        view.autoenablesDefaultLighting = true
+        view.backgroundColor = .windowBackgroundColor
+        view.scene = SCNScene()
+        return view
+    }
+
+    func updateNSView(_ nsView: SCNView, context: Context) {
+        guard context.coordinator.currentURL != url else { return }
+        context.coordinator.currentURL = url
+
+        guard let url, FileManager.default.fileExists(atPath: url.path) else {
+            nsView.scene = SCNScene()
+            return
+        }
+
+        do {
+            nsView.scene = try SCNScene(url: url, options: nil)
+        } catch {
+            nsView.scene = SCNScene()
+        }
+    }
+
+    static func dismantleNSView(_ nsView: SCNView, coordinator: Coordinator) {
+        coordinator.currentURL = nil
+        nsView.scene = nil
     }
 }
 
 private struct ThumbnailView: View {
     let imageURL: URL
+    let canRemove: Bool
+    let onRemove: () -> Void
 
     @State private var image: NSImage?
     @State private var isLoading = false
@@ -488,6 +624,18 @@ private struct ThumbnailView: View {
         }
         .frame(width: 72, height: 72)
         .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        .overlay(alignment: .topTrailing) {
+            Button(action: onRemove) {
+                Image(systemName: "xmark.circle.fill")
+                    .font(.system(size: 13))
+                    .symbolRenderingMode(.hierarchical)
+                    .foregroundStyle(.secondary)
+                    .padding(4)
+            }
+            .buttonStyle(.plain)
+            .help("Remove this photo")
+            .disabled(!canRemove)
+        }
         .task(id: imageURL, priority: .utility) {
             await loadThumbnailIfNeeded()
         }

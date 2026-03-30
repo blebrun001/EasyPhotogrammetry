@@ -54,6 +54,23 @@ struct PhotogrammetryViewModelTests {
         }
     }
 
+    @Test("removeImage removes one entry and keeps workflow ready")
+    @MainActor
+    func removeSingleImage() {
+        let viewModel = makeViewModel()
+        let a = URL(fileURLWithPath: "/tmp/a.jpg")
+        let b = URL(fileURLWithPath: "/tmp/b.jpg")
+
+        viewModel.handleImportedImageURLs([a, b], behavior: .append)
+        #expect(viewModel.droppedImageURLs == [a, b])
+
+        viewModel.removeImage(a)
+
+        #expect(viewModel.droppedImageURLs == [b])
+        #expect(viewModel.state == .ready)
+        #expect(viewModel.hasImportedImages == true)
+    }
+
     @Test("guards update based on state and input")
     @MainActor
     func guardValues() {
@@ -65,6 +82,9 @@ struct PhotogrammetryViewModelTests {
         viewModel.handleImportedImageURLs([URL(fileURLWithPath: "/tmp/a.jpg")], behavior: .append)
         #expect(viewModel.canGenerateModel == true)
         #expect(viewModel.canClearSelection == true)
+        #expect(viewModel.hasImportedImages == true)
+        #expect(viewModel.hasGeneratedPhotogrammetryModel == false)
+        #expect(viewModel.hasExportableModel == false)
     }
 
     @Test("generation success clamps progress and reaches completed state")
@@ -99,6 +119,8 @@ struct PhotogrammetryViewModelTests {
         })
         #expect(viewModel.outputURL == outputURL)
         #expect(viewModel.selectedScaleFileURL == outputURL)
+        #expect(viewModel.hasGeneratedPhotogrammetryModel == true)
+        #expect(viewModel.hasExportableModel == true)
     }
 
     @Test("generation error transitions to failed")
@@ -195,7 +217,37 @@ struct PhotogrammetryViewModelTests {
         #expect(viewModel.outputURL == outputURL)
         #expect(viewModel.selectedScaleFileURL == outputURL)
         #expect(viewModel.scalingResultMessage.contains("Scaled model"))
+        #expect(viewModel.scalingSuccessCount == 1)
         #expect(viewModel.isScaling == false)
+    }
+
+    @Test("resetting imported images clears scaling progression")
+    @MainActor
+    func clearingSelectionResetsScalingProgression() {
+        let inputURL = URL(fileURLWithPath: "/tmp/source.usdz")
+        let outputURL = URL(fileURLWithPath: "/tmp/scaled_source.usdz")
+        let scalingUseCase = StubScalingUseCase { _ in outputURL }
+
+        let viewModel = PhotogrammetryViewModel(
+            service: StubPhotogrammetryService { _, _, _ in URL(fileURLWithPath: "/tmp/model.usdz") },
+            scalingUseCase: scalingUseCase,
+            isPhotogrammetrySupported: { true }
+        )
+
+        viewModel.handleImportedImageURLs([URL(fileURLWithPath: "/tmp/a.jpg")], behavior: .append)
+        viewModel.selectedScaleFileURL = inputURL
+        viewModel.uncalibratedMeasurement = "10"
+        viewModel.realMeasurement = "20"
+        viewModel.scaleModel()
+
+        #expect(viewModel.scalingSuccessCount == 1)
+        #expect(viewModel.hasExportableModel == true)
+
+        viewModel.clearSelection()
+
+        #expect(viewModel.scalingSuccessCount == 0)
+        #expect(viewModel.hasImportedImages == false)
+        #expect(viewModel.hasExportableModel == false)
     }
 
     @Test("scaleModel failure reports error")
