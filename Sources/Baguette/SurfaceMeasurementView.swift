@@ -23,6 +23,9 @@ struct MeasurementUpdate: Equatable {
 }
 
 struct SurfaceMeasurementView: NSViewRepresentable {
+    fileprivate static let modelHitCategoryMask = 1 << 0
+    fileprivate static let overlayHitCategoryMask = 1 << 1
+
     let modelURL: URL?
     let isMeasurementModeEnabled: Bool
     let editingCommand: MeasurementEditingCommand
@@ -103,6 +106,11 @@ struct SurfaceMeasurementView: NSViewRepresentable {
 
             do {
                 view.scene = try SCNScene(url: modelURL, options: nil)
+                view.scene?.rootNode.enumerateChildNodes { node, _ in
+                    if node.geometry != nil {
+                        node.categoryBitMask = SurfaceMeasurementView.modelHitCategoryMask
+                    }
+                }
             } catch {
                 view.scene = SCNScene()
             }
@@ -231,6 +239,7 @@ struct SurfaceMeasurementView: NSViewRepresentable {
                 sphere.firstMaterial?.diffuse.contents = NSColor.systemGreen
                 sphere.firstMaterial?.emission.contents = NSColor.systemGreen
                 let node = SCNNode(geometry: sphere)
+                node.categoryBitMask = SurfaceMeasurementView.overlayHitCategoryMask
                 hoverNode = node
                 root.addChildNode(node)
             }
@@ -247,7 +256,9 @@ struct SurfaceMeasurementView: NSViewRepresentable {
             let sphere = SCNSphere(radius: 0.004)
             sphere.firstMaterial?.diffuse.contents = color
             sphere.firstMaterial?.emission.contents = color
-            return SCNNode(geometry: sphere)
+            let node = SCNNode(geometry: sphere)
+            node.categoryBitMask = SurfaceMeasurementView.overlayHitCategoryMask
+            return node
         }
 
         private func addSegment(from start: SCNVector3, to end: SCNVector3, in root: SCNNode) {
@@ -258,6 +269,7 @@ struct SurfaceMeasurementView: NSViewRepresentable {
             geometry.firstMaterial?.emission.contents = NSColor.systemYellow
 
             let node = SCNNode(geometry: geometry)
+            node.categoryBitMask = SurfaceMeasurementView.overlayHitCategoryMask
             segmentNode = node
             root.addChildNode(node)
         }
@@ -272,6 +284,7 @@ struct SurfaceMeasurementView: NSViewRepresentable {
             let node = SCNNode(geometry: text)
             node.scale = SCNVector3(0.002, 0.002, 0.002)
             node.constraints = [SCNBillboardConstraint()]
+            node.categoryBitMask = SurfaceMeasurementView.overlayHitCategoryMask
 
             let midpoint = SCNVector3((a.x + b.x) / 2, (a.y + b.y) / 2, (a.z + b.z) / 2)
             node.position = SCNVector3(midpoint.x, midpoint.y + 0.005, midpoint.z)
@@ -335,11 +348,30 @@ final class PointPickingSCNView: SCNView {
 
     func meshIntersection(at point: NSPoint) -> SCNHitTestResult? {
         let options: [SCNHitTestOption: Any] = [
-            .firstFoundOnly: true,
+            .firstFoundOnly: false,
             .ignoreHiddenNodes: true,
-            .backFaceCulling: false
+            .backFaceCulling: false,
+            .categoryBitMask: SurfaceMeasurementView.modelHitCategoryMask
         ]
 
-        return hitTest(point, options: options).first(where: { $0.node.geometry != nil })
+        let hits = hitTest(point, options: options).filter { $0.node.geometry != nil }
+        guard let cameraPosition = pointOfView?.presentation.worldPosition else {
+            return hits.first
+        }
+
+        return hits.min(by: {
+            squaredDistance(from: cameraPosition, to: $0.worldCoordinates)
+                < squaredDistance(from: cameraPosition, to: $1.worldCoordinates)
+        })
+    }
+
+    private func squaredDistance(from a: SCNVector3, to b: SCNVector3) -> CGFloat {
+        let dx = a.x - b.x
+        let dy = a.y - b.y
+        let dz = a.z - b.z
+        let dx2 = dx * dx
+        let dy2 = dy * dy
+        let dz2 = dz * dz
+        return dx2 + dy2 + dz2
     }
 }

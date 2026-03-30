@@ -218,97 +218,92 @@ private struct ScaleTabView: View {
     @State private var measurementUpdate: MeasurementUpdate = .idle
 
     var body: some View {
-        Form {
-            Section("File") {
-                HStack(spacing: 10) {
-                    Button {
-                        presentUSDZOpenPanel()
-                    } label: {
-                        Label("Select USDZ", systemImage: "doc")
-                    }
-                    .help("Select a USDZ model to scale")
-
-                    if let url = viewModel.selectedScaleFileURL {
-                        Text(url.lastPathComponent)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                    } else {
-                        Text("No file selected")
-                            .foregroundStyle(.secondary)
-                    }
-                }
-            }
-
-            Section("Measurements") {
-                VStack(alignment: .leading, spacing: 8) {
-                    Text(guidanceText)
-                        .font(.subheadline)
-                        .foregroundStyle(.secondary)
-
-                    HStack(spacing: 8) {
+        VStack(spacing: 12) {
+            Form {
+                Section("File") {
+                    HStack(spacing: 10) {
                         Button {
-                            toggleMeasurementMode()
+                            presentUSDZOpenPanel()
                         } label: {
-                            Label(
-                                isMeasurementModeEnabled ? "Disable measurement" : "Enable measurement",
-                                systemImage: isMeasurementModeEnabled ? "pause.circle" : "dot.scope"
-                            )
+                            Label("Select USDZ", systemImage: "doc")
                         }
+                        .help("Select a USDZ model to scale")
 
-                        Button {
-                            sendEditingCommand(.reset)
-                        } label: {
-                            Label("Reset", systemImage: "trash")
+                        if let url = viewModel.selectedScaleFileURL {
+                            Text(url.lastPathComponent)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                        } else {
+                            Text("No file selected")
+                                .foregroundStyle(.secondary)
                         }
-                        .disabled(measurementUpdate.pointCount == 0)
-
-                        Spacer()
-
-                        Text(phaseLabel)
-                            .font(.caption.monospaced())
-                            .foregroundStyle(.secondary)
-                    }
-
-                    SurfaceMeasurementView(
-                        modelURL: viewModel.selectedScaleFileURL,
-                        isMeasurementModeEnabled: isMeasurementModeEnabled,
-                        editingCommand: editingCommand,
-                        editingCommandToken: editingCommandToken
-                    ) { update in
-                        measurementUpdate = update
-                        viewModel.handleMeasurementUpdate(update)
-                        viewModel.scalingResultMessage = ""
-                    }
-                    .frame(minHeight: 260, maxHeight: 340)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-
-                    HStack(spacing: 8) {
-                        Text(distanceStatusText)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-
-                        Spacer()
                     }
                 }
 
-                TextField("Uncalibrated measure", text: $viewModel.uncalibratedMeasurement)
-                    .textFieldStyle(.roundedBorder)
+                Section("Measurements") {
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text(guidanceText)
+                            .font(.subheadline)
+                            .foregroundStyle(.secondary)
 
-                TextField("Calibrated measure (cm)", text: $viewModel.realMeasurement)
-                    .textFieldStyle(.roundedBorder)
+                        HStack(spacing: 8) {
+                            Button {
+                                toggleMeasurementMode()
+                            } label: {
+                                Label(
+                                    isMeasurementModeEnabled ? "Disable measurement" : "Enable measurement",
+                                    systemImage: isMeasurementModeEnabled ? "pause.circle" : "dot.scope"
+                                )
+                            }
 
-                Toggle("Overwrite original file", isOn: $viewModel.overwriteScaledModel)
-            }
+                            Button {
+                                sendEditingCommand(.reset)
+                            } label: {
+                                Label("Reset", systemImage: "trash")
+                            }
+                            .disabled(measurementUpdate.pointCount == 0)
 
-            Section("Run") {
-                HStack(spacing: 8) {
-                    Button {
-                        viewModel.scaleModel()
-                    } label: {
-                        Label("Start scaling", systemImage: "arrow.up.left.and.arrow.down.right")
+                            Spacer()
+
+                            Text(phaseLabel)
+                                .font(.caption.monospaced())
+                                .foregroundStyle(.secondary)
+                        }
+
+                        SurfaceMeasurementView(
+                            modelURL: viewModel.selectedScaleFileURL,
+                            isMeasurementModeEnabled: isMeasurementModeEnabled,
+                            editingCommand: editingCommand,
+                            editingCommandToken: editingCommandToken
+                        ) { update in
+                            measurementUpdate = update
+                            viewModel.handleMeasurementUpdate(update)
+                            viewModel.scalingResultMessage = ""
+
+                            if update.phase == .done {
+                                isMeasurementModeEnabled = false
+                            }
+                        }
+                        .frame(minHeight: 260, maxHeight: 340)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+                        HStack(spacing: 8) {
+                            Text(distanceStatusText)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+
+                            Spacer()
+                        }
                     }
-                    .disabled(!viewModel.canScaleModel)
+
+                    TextField("Uncalibrated measure", text: $viewModel.uncalibratedMeasurement)
+                        .textFieldStyle(.roundedBorder)
+
+                    TextField("Calibrated measure (cm)", text: $viewModel.realMeasurement)
+                        .textFieldStyle(.roundedBorder)
+
+                    Toggle("Overwrite original file", isOn: $viewModel.overwriteScaledModel)
 
                     if !viewModel.scalingResultMessage.isEmpty {
                         Text(viewModel.scalingResultMessage)
@@ -318,12 +313,31 @@ private struct ScaleTabView: View {
                     }
                 }
             }
+            .formStyle(.grouped)
+            .frame(maxHeight: .infinity)
+
+            HStack {
+                Spacer()
+                actionButton
+                Spacer()
+            }
         }
-        .formStyle(.grouped)
         .padding(16)
         .onChange(of: viewModel.selectedScaleFileURL) { _, _ in
             resetMeasurementUI()
         }
+    }
+
+    private var actionButton: some View {
+        Button {
+            viewModel.scaleModel()
+        } label: {
+            Text("Start scaling")
+                .frame(minWidth: 140)
+        }
+        .keyboardShortcut(.defaultAction)
+        .disabled(!viewModel.canScaleModel)
+        .controlSize(.large)
     }
 
     private func presentUSDZOpenPanel() {
@@ -383,6 +397,10 @@ private struct ScaleTabView: View {
     }
 
     private var guidanceText: String {
+        if measurementUpdate.phase == .done {
+            return "Distance measured. Measurement mode is disabled."
+        }
+
         guard isMeasurementModeEnabled else {
             return "Enable measurement mode, then click on the surface to place points."
         }
@@ -393,7 +411,7 @@ private struct ScaleTabView: View {
         case .pickPoint2:
             return "Select another point."
         case .done:
-            return "Distance measured. Click again to start a new measurement."
+            return "Distance measured. Measurement mode is disabled."
         }
     }
 }
