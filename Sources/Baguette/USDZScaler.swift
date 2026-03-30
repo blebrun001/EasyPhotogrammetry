@@ -26,11 +26,11 @@ enum ScalingError: LocalizedError, Equatable {
     }
 }
 
-protocol USDZScaling {
+protocol USDZScaling: Sendable {
     func scaleUSDZ(file: URL, uncalibrated: Double, real: Double) throws -> URL
 }
 
-final class USDZScaler: USDZScaling {
+final class USDZScaler: USDZScaling, @unchecked Sendable {
     private let fileManager: FileManager
 
     init(fileManager: FileManager = .default) {

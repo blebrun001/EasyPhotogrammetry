@@ -43,11 +43,13 @@ struct SurfaceMeasurementView: NSViewRepresentable {
         view.backgroundColor = .windowBackgroundColor
         view.isMeasurementModeEnabled = isMeasurementModeEnabled
 
-        view.onHover = { location in
+        view.onHover = { [weak view] location in
+            guard let view else { return }
             context.coordinator.handleHover(at: location, in: view)
         }
 
-        view.onPick = { location in
+        view.onPick = { [weak view] location in
+            guard let view else { return }
             context.coordinator.handlePick(at: location, in: view)
         }
 
@@ -72,6 +74,12 @@ struct SurfaceMeasurementView: NSViewRepresentable {
             context.coordinator.lastEditingCommandToken = editingCommandToken
             context.coordinator.apply(command: editingCommand, in: nsView)
         }
+    }
+
+    static func dismantleNSView(_ nsView: PointPickingSCNView, coordinator: Coordinator) {
+        nsView.onHover = nil
+        nsView.onPick = nil
+        nsView.scene = nil
     }
 
     @MainActor

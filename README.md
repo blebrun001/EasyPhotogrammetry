@@ -10,7 +10,7 @@ macOS application (SwiftUI + RealityKit) that generates a 3D `.usdz` model from 
 - Quality selection before generation: `Preview`, `Reduced`, `Medium`, `Full`, `Raw`.
 - Asynchronous generation with progress updates.
 - One-click opening of the generated `.usdz` file.
-- USDZ scaling tab based on in-app measurement and calibrated ratio input.
+- USDZ scaling tab with calibrated ratio input and overwrite/new-file mode.
 - User-facing error messages for unsupported devices and invalid input.
 
 ## Architecture
@@ -18,7 +18,7 @@ macOS application (SwiftUI + RealityKit) that generates a 3D `.usdz` model from 
 - `ContentView`: user interface (drop zone, actions, displayed state).
 - `PhotogrammetryViewModel`: orchestration of UI state and user actions.
 - `PhotogrammetryServicing` / `PhotogrammetryService`: service layer isolating RealityKit.
-- `ScalingUseCase` / `USDZScaler`: validated USDZ scaling flow (`real / measured distance`) persisted back to disk.
+- `ScalingUseCase` / `USDZScaler`: validated USDZ scaling flow (`real / uncalibrated`) persisted back to disk.
 - `ProcessingState`: high-level domain state (`idle`, `ready`, `processing`, `completed`, `failed`).
 - `SupportedImageFormat`: single source of truth for supported extensions.
 

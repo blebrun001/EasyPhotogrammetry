@@ -6,9 +6,9 @@ struct ScalingRequest {
     let real: Double
 }
 
-protocol ScalingUseCase {
+protocol ScalingUseCase: Sendable {
     func makeRequest(file: URL?, uncalibrated: String, real: String) throws -> ScalingRequest
-    func execute(_ request: ScalingRequest) throws -> URL
+    func execute(_ request: ScalingRequest) async throws -> URL
 }
 
 struct DefaultScalingUseCase: ScalingUseCase {
@@ -37,11 +37,25 @@ struct DefaultScalingUseCase: ScalingUseCase {
         )
     }
 
-    func execute(_ request: ScalingRequest) throws -> URL {
-        try scaler.scaleUSDZ(
-            file: request.file,
-            uncalibrated: request.uncalibrated,
-            real: request.real
-        )
+    func execute(_ request: ScalingRequest) async throws -> URL {
+        let scaler = SendableScalerBox(scaler: scaler)
+        return try await withCheckedThrowingContinuation { continuation in
+            DispatchQueue.global(qos: .userInitiated).async {
+                do {
+                    let url = try scaler.scaler.scaleUSDZ(
+                        file: request.file,
+                        uncalibrated: request.uncalibrated,
+                        real: request.real
+                    )
+                    continuation.resume(returning: url)
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
     }
+}
+
+private struct SendableScalerBox: @unchecked Sendable {
+    let scaler: USDZScaling
 }

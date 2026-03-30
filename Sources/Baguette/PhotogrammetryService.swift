@@ -37,21 +37,33 @@ enum PhotogrammetryServiceError: LocalizedError, Equatable {
 
 /// Concrete RealityKit-backed implementation for Apple Object Capture.
 final class PhotogrammetryService: PhotogrammetryServicing, @unchecked Sendable {
+    private static let defaultSessionRunner: PhotogrammetrySessionRunner = { inputDirectory, outputURL, detail, onProgress in
+        try await runRealityKitSession(
+            inputDirectory: inputDirectory,
+            outputURL: outputURL,
+            detail: detail,
+            onProgress: onProgress
+        )
+    }
+
     private let temporaryStore: TemporaryGenerationStore
     private let isPhotogrammetrySupported: @Sendable () -> Bool
     private let sessionRunner: PhotogrammetrySessionRunner
     private let fileManager: FileManager
+    private let stagingQueue: DispatchQueue
 
     init(
         temporaryStore: TemporaryGenerationStore = .shared,
         isPhotogrammetrySupported: @escaping @Sendable () -> Bool = { PhotogrammetrySession.isSupported },
-        sessionRunner: @escaping PhotogrammetrySessionRunner = PhotogrammetryService.runRealityKitSession,
-        fileManager: FileManager = .default
+        sessionRunner: @escaping PhotogrammetrySessionRunner = PhotogrammetryService.defaultSessionRunner,
+        fileManager: FileManager = .default,
+        stagingQueue: DispatchQueue = DispatchQueue(label: "Baguette.PhotogrammetryService.Staging", qos: .userInitiated)
     ) {
         self.temporaryStore = temporaryStore
         self.isPhotogrammetrySupported = isPhotogrammetrySupported
         self.sessionRunner = sessionRunner
         self.fileManager = fileManager
+        self.stagingQueue = stagingQueue
     }
 
     func generateUSDZ(from imageURLs: [URL], detail: PhotogrammetrySession.Request.Detail) async throws -> URL {
@@ -76,15 +88,7 @@ final class PhotogrammetryService: PhotogrammetryServicing, @unchecked Sendable 
         let inputDirectory = workspace.inputDirectory
         let outputURL = workspace.outputModelURL
 
-        for imageURL in validImages {
-            let destination = inputDirectory.appendingPathComponent(imageURL.lastPathComponent)
-            if fileManager.fileExists(atPath: destination.path) {
-                let deduplicatedName = "\(UUID().uuidString)_\(imageURL.lastPathComponent)"
-                try fileManager.copyItem(at: imageURL, to: inputDirectory.appendingPathComponent(deduplicatedName))
-            } else {
-                try fileManager.copyItem(at: imageURL, to: destination)
-            }
-        }
+        try await stageImages(validImages, in: inputDirectory)
 
         defer { temporaryStore.removeInputDirectoryIfPresent(at: inputDirectory) }
 
@@ -95,6 +99,28 @@ final class PhotogrammetryService: PhotogrammetryServicing, @unchecked Sendable 
         }
 
         return outputURL
+    }
+
+    private func stageImages(_ imageURLs: [URL], in inputDirectory: URL) async throws {
+        let fileManager = SendableFileManagerBox(fileManager: self.fileManager)
+        try await withCheckedThrowingContinuation { continuation in
+            stagingQueue.async {
+                do {
+                    for imageURL in imageURLs {
+                        let destination = inputDirectory.appendingPathComponent(imageURL.lastPathComponent)
+                        if fileManager.fileManager.fileExists(atPath: destination.path) {
+                            let deduplicatedName = "\(UUID().uuidString)_\(imageURL.lastPathComponent)"
+                            try fileManager.fileManager.copyItem(at: imageURL, to: inputDirectory.appendingPathComponent(deduplicatedName))
+                        } else {
+                            try fileManager.fileManager.copyItem(at: imageURL, to: destination)
+                        }
+                    }
+                    continuation.resume()
+                } catch {
+                    continuation.resume(throwing: error)
+                }
+            }
+        }
     }
 
     private static func runRealityKitSession(
@@ -132,6 +158,10 @@ final class PhotogrammetryService: PhotogrammetryServicing, @unchecked Sendable 
             session.cancel()
         }
     }
+}
+
+private struct SendableFileManagerBox: @unchecked Sendable {
+    let fileManager: FileManager
 }
 
 final class TemporaryGenerationStore: @unchecked Sendable {

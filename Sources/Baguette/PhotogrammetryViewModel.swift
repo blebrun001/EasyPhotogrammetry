@@ -1,6 +1,5 @@
 import Foundation
 import RealityKit
-import UniformTypeIdentifiers
 
 enum ModelQuality: String, CaseIterable, Identifiable {
     case preview
@@ -88,8 +87,8 @@ final class PhotogrammetryViewModel: ObservableObject {
     private let scalingUseCase: ScalingUseCase
     private let isPhotogrammetrySupported: () -> Bool
     private let fileManager: FileManaging
-    private let itemProviderLoader: ItemProviderLoading
     private var generationTask: Task<Void, Never>?
+    private var scalingTask: Task<Void, Never>?
     private var feedbackDismissTask: Task<Void, Never>?
     private var generatedModelURL: URL?
     private var scaledModelURL: URL?
@@ -98,14 +97,12 @@ final class PhotogrammetryViewModel: ObservableObject {
         service: PhotogrammetryServicing,
         scalingUseCase: ScalingUseCase = DefaultScalingUseCase(),
         isPhotogrammetrySupported: @escaping () -> Bool = { PhotogrammetrySession.isSupported },
-        fileManager: FileManaging = FileManager.default,
-        itemProviderLoader: ItemProviderLoading = DefaultItemProviderLoader()
+        fileManager: FileManaging = FileManager.default
     ) {
         self.service = service
         self.scalingUseCase = scalingUseCase
         self.isPhotogrammetrySupported = isPhotogrammetrySupported
         self.fileManager = fileManager
-        self.itemProviderLoader = itemProviderLoader
 
         if !isPhotogrammetrySupported() {
             state = .failed(message: "This machine is not compatible with Apple photogrammetry.")
@@ -155,14 +152,6 @@ final class PhotogrammetryViewModel: ObservableObject {
         return nil
     }
 
-    var canSaveGeneratedModel: Bool {
-        outputURL != nil
-    }
-
-    var hasGeneratedModel: Bool {
-        outputURL != nil
-    }
-
     var hasImportedImages: Bool {
         !droppedImageURLs.isEmpty
     }
@@ -177,47 +166,11 @@ final class PhotogrammetryViewModel: ObservableObject {
         return false
     }
 
-    var hasExportableModel: Bool {
-        outputURL != nil
-    }
-
     var canScaleModel: Bool {
         guard !isScaling else { return false }
         guard selectedScaleFileURL != nil else { return false }
         guard let realValue = Double(realMeasurement), realValue > 0 else { return false }
         guard let uncalibratedValue = Double(uncalibratedMeasurement), uncalibratedValue > 0 else { return false }
-        return true
-    }
-
-    func handleDroppedItems(_ providers: [NSItemProvider]) -> Bool {
-        guard !providers.isEmpty else { return false }
-
-        Task { @MainActor in
-            var accepted: [URL] = []
-
-            for provider in providers {
-                guard itemProviderLoader.hasFileURL(provider) else {
-                    continue
-                }
-
-                do {
-                    let url = try await itemProviderLoader.loadFileURL(from: provider)
-                    if SupportedImageFormat.isSupported(url) {
-                        accepted.append(url)
-                    }
-                } catch {
-                    continue
-                }
-            }
-
-            if accepted.isEmpty {
-                state = .failed(message: "No valid images detected (\(SupportedImageFormat.userFacingList)).")
-                return
-            }
-
-            setImages(accepted, behavior: .replace)
-        }
-
         return true
     }
 
@@ -235,6 +188,8 @@ final class PhotogrammetryViewModel: ObservableObject {
         guard canClearSelection else { return }
         generationTask?.cancel()
         generationTask = nil
+        scalingTask?.cancel()
+        scalingTask = nil
         droppedImageURLs = []
         generatedModelURL = nil
         scaledModelURL = nil
@@ -249,6 +204,8 @@ final class PhotogrammetryViewModel: ObservableObject {
 
         generationTask?.cancel()
         generationTask = nil
+        scalingTask?.cancel()
+        scalingTask = nil
 
         droppedImageURLs.remove(at: index)
         generatedModelURL = nil
@@ -292,25 +249,51 @@ final class PhotogrammetryViewModel: ObservableObject {
         showEphemeralFeedback("3D model has been successfully saved.")
     }
 
+    func handleImportFailure(_ error: Error) {
+        state = .failed(message: "Unable to import images: \(error.localizedDescription)")
+    }
+
+    func handleSaveFailure(_ error: Error) {
+        state = .failed(message: "Unable to save model: \(error.localizedDescription)")
+    }
+
     func scaleModel() {
+        guard canScaleModel else { return }
+        scalingTask?.cancel()
+
         isScaling = true
         showEphemeralFeedback("3D model scaling has started.")
-        defer { isScaling = false }
 
-        do {
-            let request = try scalingUseCase.makeRequest(
-                file: selectedScaleFileURL,
-                uncalibrated: uncalibratedMeasurement,
-                real: realMeasurement
-            )
-            let resultURL = try scalingUseCase.execute(request)
-            scaledModelURL = resultURL
-            selectedScaleFileURL = resultURL
-            scalingSuccessCount += 1
-            scalingResultMessage = "Scaled model: \(resultURL.lastPathComponent)"
-            showEphemeralFeedback("3D model has been successfully scaled.")
-        } catch {
-            scalingResultMessage = "Scaling error: \(error.localizedDescription)"
+        let currentScaleFileURL = selectedScaleFileURL
+        let currentUncalibratedMeasurement = uncalibratedMeasurement
+        let currentRealMeasurement = realMeasurement
+        let scalingUseCase = self.scalingUseCase
+
+        scalingTask = Task { [weak self] in
+            guard let self else { return }
+            defer {
+                isScaling = false
+                scalingTask = nil
+            }
+
+            do {
+                let request = try scalingUseCase.makeRequest(
+                    file: currentScaleFileURL,
+                    uncalibrated: currentUncalibratedMeasurement,
+                    real: currentRealMeasurement
+                )
+                let resultURL = try await scalingUseCase.execute(request)
+                guard !Task.isCancelled else { return }
+
+                scaledModelURL = resultURL
+                self.selectedScaleFileURL = resultURL
+                scalingSuccessCount += 1
+                scalingResultMessage = "Scaled model: \(resultURL.lastPathComponent)"
+                showEphemeralFeedback("3D model has been successfully scaled.")
+            } catch {
+                guard !Task.isCancelled else { return }
+                scalingResultMessage = "Scaling error: \(error.localizedDescription)"
+            }
         }
     }
 
@@ -433,6 +416,12 @@ final class PhotogrammetryViewModel: ObservableObject {
 
         return result
     }
+
+    deinit {
+        generationTask?.cancel()
+        scalingTask?.cancel()
+        feedbackDismissTask?.cancel()
+    }
 }
 
 enum ImportBehavior {
@@ -447,39 +436,3 @@ protocol FileManaging {
 }
 
 extension FileManager: FileManaging {}
-
-protocol ItemProviderLoading {
-    func hasFileURL(_ provider: NSItemProvider) -> Bool
-    @MainActor func loadFileURL(from provider: NSItemProvider) async throws -> URL
-}
-
-struct DefaultItemProviderLoader: ItemProviderLoading {
-    func hasFileURL(_ provider: NSItemProvider) -> Bool {
-        provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier)
-    }
-
-    @MainActor
-    func loadFileURL(from provider: NSItemProvider) async throws -> URL {
-        try await withCheckedThrowingContinuation { continuation in
-            provider.loadItem(forTypeIdentifier: UTType.fileURL.identifier, options: nil) { item, error in
-                if let error {
-                    continuation.resume(throwing: error)
-                    return
-                }
-
-                if let data = item as? Data,
-                   let url = URL(dataRepresentation: data, relativeTo: nil) {
-                    continuation.resume(returning: url)
-                    return
-                }
-
-                if let url = item as? URL {
-                    continuation.resume(returning: url)
-                    return
-                }
-
-                continuation.resume(throwing: CocoaError(.fileReadCorruptFile))
-            }
-        }
-    }
-}

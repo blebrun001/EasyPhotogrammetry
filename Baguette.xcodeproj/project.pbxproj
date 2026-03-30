@@ -16,10 +16,12 @@
 		A10000010000000000000007 /* SupportedImageFormat.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000007 /* SupportedImageFormat.swift */; };
 		A10000010000000000000008 /* Baguette.icns in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000008 /* Baguette.icns */; };
 		A10000010000000000000009 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000010 /* Assets.xcassets */; };
-		A1000001000000000000000A /* Model3DTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000001000000000000000B /* Model3DTabView.swift */; };
 		A1000001000000000000000C /* ScalingUseCase.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000001000000000000000C /* ScalingUseCase.swift */; };
 		A1000001000000000000000D /* USDZScaler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000001000000000000000D /* USDZScaler.swift */; };
 		A1000001000000000000000E /* SurfaceMeasurementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000001000000000000000E /* SurfaceMeasurementView.swift */; };
+		A10000010000000000000020 /* ImportPhotosTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000020 /* ImportPhotosTabView.swift */; };
+		A10000010000000000000021 /* ProcessSettingsTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000021 /* ProcessSettingsTabView.swift */; };
+		A10000010000000000000022 /* ScaleTabView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000010000000000000022 /* ScaleTabView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
@@ -33,10 +35,12 @@
 		A20000010000000000000008 /* Baguette.icns */ = {isa = PBXFileReference; lastKnownFileType = image.icns; path = Baguette.icns; sourceTree = "<group>"; };
 		A20000010000000000000009 /* Baguette.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Baguette.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A20000010000000000000010 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
-		A2000001000000000000000B /* Model3DTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Model3DTabView.swift; sourceTree = "<group>"; };
 		A2000001000000000000000C /* ScalingUseCase.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScalingUseCase.swift; sourceTree = "<group>"; };
 		A2000001000000000000000D /* USDZScaler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = USDZScaler.swift; sourceTree = "<group>"; };
 		A2000001000000000000000E /* SurfaceMeasurementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SurfaceMeasurementView.swift; sourceTree = "<group>"; };
+		A20000010000000000000020 /* ImportPhotosTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ImportPhotosTabView.swift; sourceTree = "<group>"; };
+		A20000010000000000000021 /* ProcessSettingsTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProcessSettingsTabView.swift; sourceTree = "<group>"; };
+		A20000010000000000000022 /* ScaleTabView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ScaleTabView.swift; sourceTree = "<group>"; };
 		A50000010000000000000001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -90,10 +94,12 @@
 				A20000010000000000000001 /* AppIconBootstrap.swift */,
 				A20000010000000000000002 /* BaguetteApp.swift */,
 				A20000010000000000000003 /* ContentView.swift */,
-				A2000001000000000000000B /* Model3DTabView.swift */,
+				A20000010000000000000020 /* ImportPhotosTabView.swift */,
 				A20000010000000000000004 /* PhotogrammetryService.swift */,
 				A20000010000000000000005 /* PhotogrammetryViewModel.swift */,
+				A20000010000000000000021 /* ProcessSettingsTabView.swift */,
 				A20000010000000000000006 /* ProcessingState.swift */,
+				A20000010000000000000022 /* ScaleTabView.swift */,
 				A2000001000000000000000C /* ScalingUseCase.swift */,
 				A2000001000000000000000E /* SurfaceMeasurementView.swift */,
 				A20000010000000000000007 /* SupportedImageFormat.swift */,
@@ -185,13 +191,15 @@
 				A10000010000000000000001 /* AppIconBootstrap.swift in Sources */,
 				A10000010000000000000002 /* BaguetteApp.swift in Sources */,
 				A10000010000000000000003 /* ContentView.swift in Sources */,
+				A10000010000000000000020 /* ImportPhotosTabView.swift in Sources */,
 				A10000010000000000000004 /* PhotogrammetryService.swift in Sources */,
 				A10000010000000000000005 /* PhotogrammetryViewModel.swift in Sources */,
+				A10000010000000000000021 /* ProcessSettingsTabView.swift in Sources */,
 				A10000010000000000000006 /* ProcessingState.swift in Sources */,
+				A10000010000000000000022 /* ScaleTabView.swift in Sources */,
 				A1000001000000000000000C /* ScalingUseCase.swift in Sources */,
 				A1000001000000000000000E /* SurfaceMeasurementView.swift in Sources */,
 				A10000010000000000000007 /* SupportedImageFormat.swift in Sources */,
-				A1000001000000000000000A /* Model3DTabView.swift in Sources */,
 				A1000001000000000000000D /* USDZScaler.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;

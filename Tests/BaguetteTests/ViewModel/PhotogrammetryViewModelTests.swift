@@ -84,7 +84,7 @@ struct PhotogrammetryViewModelTests {
         #expect(viewModel.canClearSelection == true)
         #expect(viewModel.hasImportedImages == true)
         #expect(viewModel.hasGeneratedPhotogrammetryModel == false)
-        #expect(viewModel.hasExportableModel == false)
+        #expect(viewModel.outputURL == nil)
     }
 
     @Test("generation success clamps progress and reaches completed state")
@@ -120,7 +120,7 @@ struct PhotogrammetryViewModelTests {
         #expect(viewModel.outputURL == outputURL)
         #expect(viewModel.selectedScaleFileURL == outputURL)
         #expect(viewModel.hasGeneratedPhotogrammetryModel == true)
-        #expect(viewModel.hasExportableModel == true)
+        #expect(viewModel.outputURL != nil)
     }
 
     @Test("generation error transitions to failed")
@@ -192,7 +192,7 @@ struct PhotogrammetryViewModelTests {
 
     @Test("scaleModel success updates output and message")
     @MainActor
-    func scaleSuccess() {
+    func scaleSuccess() async {
         let inputURL = URL(fileURLWithPath: "/tmp/source.usdz")
         let outputURL = URL(fileURLWithPath: "/tmp/scaled_source.usdz")
         let scalingUseCase = StubScalingUseCase { request in
@@ -212,16 +212,16 @@ struct PhotogrammetryViewModelTests {
 
         viewModel.scaleModel()
 
+        #expect(await waitUntil { viewModel.scalingSuccessCount == 1 })
         #expect(viewModel.outputURL == outputURL)
         #expect(viewModel.selectedScaleFileURL == outputURL)
         #expect(viewModel.scalingResultMessage.contains("Scaled model"))
-        #expect(viewModel.scalingSuccessCount == 1)
         #expect(viewModel.isScaling == false)
     }
 
     @Test("resetting imported images clears scaling progression")
     @MainActor
-    func clearingSelectionResetsScalingProgression() {
+    func clearingSelectionResetsScalingProgression() async {
         let inputURL = URL(fileURLWithPath: "/tmp/source.usdz")
         let outputURL = URL(fileURLWithPath: "/tmp/scaled_source.usdz")
         let scalingUseCase = StubScalingUseCase { _ in outputURL }
@@ -238,19 +238,20 @@ struct PhotogrammetryViewModelTests {
         viewModel.realMeasurement = "20"
         viewModel.scaleModel()
 
+        #expect(await waitUntil { viewModel.scalingSuccessCount == 1 })
         #expect(viewModel.scalingSuccessCount == 1)
-        #expect(viewModel.hasExportableModel == true)
+        #expect(viewModel.outputURL != nil)
 
         viewModel.clearSelection()
 
         #expect(viewModel.scalingSuccessCount == 0)
         #expect(viewModel.hasImportedImages == false)
-        #expect(viewModel.hasExportableModel == false)
+        #expect(viewModel.outputURL == nil)
     }
 
     @Test("scaleModel failure reports error")
     @MainActor
-    func scaleFailure() {
+    func scaleFailure() async {
         let scalingUseCase = StubScalingUseCase { _ in
             throw ViewModelTestError.expectedFailure
         }
@@ -265,8 +266,39 @@ struct PhotogrammetryViewModelTests {
 
         viewModel.scaleModel()
 
+        #expect(await waitUntil { !viewModel.scalingResultMessage.isEmpty })
         #expect(viewModel.scalingResultMessage.contains("Scaling error"))
         #expect(viewModel.isScaling == false)
+    }
+
+    @Test("import failure is centralized by view model")
+    @MainActor
+    func importFailureHandling() {
+        let viewModel = makeViewModel()
+
+        viewModel.handleImportFailure(ViewModelTestError.expectedFailure)
+
+        if case .failed(let message) = viewModel.state {
+            #expect(message.contains("Unable to import images"))
+            #expect(message.contains("Expected failure"))
+        } else {
+            Issue.record("Expected failed state after import failure")
+        }
+    }
+
+    @Test("save failure is centralized by view model")
+    @MainActor
+    func saveFailureHandling() {
+        let viewModel = makeViewModel()
+
+        viewModel.handleSaveFailure(ViewModelTestError.expectedFailure)
+
+        if case .failed(let message) = viewModel.state {
+            #expect(message.contains("Unable to save model"))
+            #expect(message.contains("Expected failure"))
+        } else {
+            Issue.record("Expected failed state after save failure")
+        }
     }
 
     @Test("applyMeasuredUncalibratedDistance writes formatted value")
@@ -375,7 +407,7 @@ private struct StubPhotogrammetryService: PhotogrammetryServicing {
 }
 
 private struct StubScalingUseCase: ScalingUseCase {
-    let scaleHandler: (ScalingRequest) throws -> URL
+    let scaleHandler: @Sendable (ScalingRequest) throws -> URL
 
     func makeRequest(file: URL?, uncalibrated: String, real: String) throws -> ScalingRequest {
         guard let file else {
@@ -394,7 +426,7 @@ private struct StubScalingUseCase: ScalingUseCase {
         )
     }
 
-    func execute(_ request: ScalingRequest) throws -> URL {
+    func execute(_ request: ScalingRequest) async throws -> URL {
         try scaleHandler(request)
     }
 }
