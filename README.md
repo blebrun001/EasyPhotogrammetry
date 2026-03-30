@@ -2,6 +2,19 @@
 
 macOS application (SwiftUI + RealityKit) that generates a 3D `.usdz` model from a batch of images using Apple Object Capture.
 
+## Install (for users)
+
+If you only want to use the app (without building from source), install it from the `.dmg`
+attached to the latest GitHub Release.
+
+1. Open the project Releases page on GitHub.
+2. Download `Baguette-<version>-macos-arm64.dmg`.
+3. Open the `.dmg`, then drag `Baguette.app` to `Applications`.
+4. Launch `Baguette` from `Applications`.
+
+Note: this release is currently not notarized, so macOS Gatekeeper may display a warning
+on first launch.
+
 ## Features
 
 - 3-step workflow split across tabs: `Import`, `Process`, `Scale`.
@@ -120,12 +133,38 @@ To regenerate PNG renders and the `.icns` fallback:
 ./Scripts/generate_app_icon.sh
 ```
 
-## Current limitations
+## GitHub Release DMG
 
-- `.usdz` output is generated in a temporary directory;
-- each new generation creates a new temporary input/output workspace;
-- scaling currently writes a new file (`scaled_<original_name>.usdz`) instead of overwriting in place from the UI;
-- generated temporary workspaces are cleaned at app shutdown.
+The repository includes a dedicated workflow that builds and publishes a macOS `.dmg`
+artifact on GitHub Releases.
+
+- Workflow: `.github/workflows/release.yml`
+- Trigger on tags matching `v*` (for example `v1.2.3`)
+- Manual trigger via `workflow_dispatch` (run it on a `v*` tag ref)
+- Output asset name: `Baguette-<version>-macos-arm64.dmg`
+
+Create and push a release tag:
+
+```bash
+git tag v1.2.3
+git push origin v1.2.3
+```
+
+The workflow will:
+
+1. Build `Baguette.app` in `Release` using Xcode.
+2. Package the app into a compressed DMG.
+3. Generate a SHA-256 checksum file.
+4. Attach both files to the corresponding GitHub Release.
+
+Manual packaging helper:
+
+```bash
+./Scripts/create_dmg.sh /path/to/Baguette.app 1.2.3
+```
+
+This first iteration does not include Developer ID signing or Apple notarization,
+so Gatekeeper can display a warning on download/open.
 
 ## License
 

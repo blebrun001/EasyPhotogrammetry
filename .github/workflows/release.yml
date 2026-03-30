@@ -21,10 +21,11 @@ jobs:
       - name: Resolve version
         id: version
         run: |
-          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" ]]; then
-            REF_NAME="${GITHUB_REF_NAME:-manual}"
-          else
-            REF_NAME="${GITHUB_REF_NAME}"
+          REF_NAME="${GITHUB_REF_NAME}"
+          if [[ "${REF_NAME}" != v* ]]; then
+            echo "This workflow requires a tag starting with 'v' (current ref: ${REF_NAME})." >&2
+            echo "Run workflow_dispatch from a tag like v1.2.3, or push such a tag." >&2
+            exit 1
           fi
           VERSION="${REF_NAME#v}"
           echo "ref_name=${REF_NAME}" >> "$GITHUB_OUTPUT"
@@ -38,6 +39,9 @@ jobs:
             -configuration Release \
             -destination 'platform=macOS' \
             -derivedDataPath .build/DerivedData \
+            ARCHS=arm64 \
+            ONLY_ACTIVE_ARCH=YES \
+            CODE_SIGNING_ALLOWED=NO \
             build
 
       - name: Create DMG
