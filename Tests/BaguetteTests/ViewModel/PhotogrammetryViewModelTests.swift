@@ -659,7 +659,7 @@ private struct StubPhotogrammetryService: PhotogrammetryServicing {
     }
 
     func generateUSDZ(from imageURLs: [URL], detail: PhotogrammetrySession.Request.Detail) async throws -> URL {
-        await tracker?.recordGenerateCall(detail: detail)
+        await tracker?.recordGenerateCall(detailRawValue: detail.rawValue)
         return try await handler(imageURLs, detail, { _ in })
     }
 
@@ -668,7 +668,7 @@ private struct StubPhotogrammetryService: PhotogrammetryServicing {
         detail: PhotogrammetrySession.Request.Detail,
         onProgress: @escaping @Sendable (Double) -> Void
     ) async throws -> URL {
-        await tracker?.recordGenerateCall(detail: detail)
+        await tracker?.recordGenerateCall(detailRawValue: detail.rawValue)
         return try await handler(imageURLs, detail, onProgress)
     }
 
@@ -684,9 +684,9 @@ private actor ServiceTracker {
     private var detailRawValues: [Int] = []
     private var cleaned: [URL] = []
 
-    func recordGenerateCall(detail: PhotogrammetrySession.Request.Detail) {
+    func recordGenerateCall(detailRawValue: Int) {
         generateCalls += 1
-        detailRawValues.append(detail.rawValue)
+        detailRawValues.append(detailRawValue)
     }
 
     func recordCleanupCall(url: URL) {
