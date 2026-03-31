@@ -65,7 +65,7 @@ struct PhotogrammetryServiceTests {
         let service = PhotogrammetryService(
             temporaryStore: store,
             isPhotogrammetrySupported: { true },
-            sessionRunner: { inputDirectory, outputURL, _, _ in
+            sessionRunner: { inputDirectory, outputURL, _, _, _, _ in
                 let fileNames = try FileManager.default.contentsOfDirectory(atPath: inputDirectory.path)
                 await recorder.record(inputDirectory: inputDirectory, fileNames: fileNames)
                 try Data("ok".utf8).write(to: outputURL)
@@ -92,7 +92,7 @@ struct PhotogrammetryServiceTests {
         let service = PhotogrammetryService(
             temporaryStore: TemporaryGenerationStore(rootDirectory: testRoot.appendingPathComponent("store", isDirectory: true), cleanOnInit: true),
             isPhotogrammetrySupported: { true },
-            sessionRunner: { _, _, _, _ in }
+            sessionRunner: { _, _, _, _, _, _ in }
         )
 
         do {
@@ -120,7 +120,7 @@ struct PhotogrammetryServiceTests {
         let service = PhotogrammetryService(
             temporaryStore: TemporaryGenerationStore(rootDirectory: testRoot.appendingPathComponent("store", isDirectory: true), cleanOnInit: true),
             isPhotogrammetrySupported: { true },
-            sessionRunner: { _, outputURL, _, onProgress in
+            sessionRunner: { _, outputURL, _, _, _, onProgress in
                 onProgress(0.25)
                 onProgress(0.75)
                 await progressRecorder.record(0.25)

@@ -46,6 +46,32 @@ enum ModelQuality: String, CaseIterable, Identifiable {
     }
 }
 
+/// User-facing feature-sensitivity presets mapped to Object Capture configuration.
+enum FeatureSensitivityOption: String, CaseIterable, Identifiable {
+    case normal
+    case high
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .normal:
+            return "Normal"
+        case .high:
+            return "High"
+        }
+    }
+
+    var value: PhotogrammetrySession.Configuration.FeatureSensitivity {
+        switch self {
+        case .normal:
+            return .normal
+        case .high:
+            return .high
+        }
+    }
+}
+
 /// Main UI state holder for drag-and-drop and model generation flow.
 @MainActor
 final class PhotogrammetryViewModel: ObservableObject {
@@ -62,6 +88,18 @@ final class PhotogrammetryViewModel: ObservableObject {
         didSet {
             guard selectedQuality != oldValue else { return }
             handleSelectedQualityChange(from: oldValue, to: selectedQuality)
+        }
+    }
+    @Published var selectedFeatureSensitivity: FeatureSensitivityOption {
+        didSet {
+            guard selectedFeatureSensitivity != oldValue else { return }
+            handleCaptureOptionsChange()
+        }
+    }
+    @Published var isObjectMaskingEnabled: Bool {
+        didSet {
+            guard isObjectMaskingEnabled != oldValue else { return }
+            handleCaptureOptionsChange()
         }
     }
     @Published var isImportPickerPresented = false
@@ -117,6 +155,9 @@ final class PhotogrammetryViewModel: ObservableObject {
         self.scalingUseCase = scalingUseCase
         self.isPhotogrammetrySupported = isPhotogrammetrySupported
         self.fileManager = fileManager
+        let defaultConfiguration = PhotogrammetrySession.Configuration()
+        selectedFeatureSensitivity = defaultConfiguration.featureSensitivity == .high ? .high : .normal
+        isObjectMaskingEnabled = defaultConfiguration.isObjectMaskingEnabled
 
         if !isPhotogrammetrySupported() {
             state = .failed(message: "This machine is not compatible with Apple photogrammetry.")
@@ -414,6 +455,8 @@ final class PhotogrammetryViewModel: ObservableObject {
             let outputURL = try await service.generateUSDZ(
                 from: droppedImageURLs,
                 detail: selectedQuality.detail,
+                featureSensitivity: selectedFeatureSensitivity.value,
+                isObjectMaskingEnabled: isObjectMaskingEnabled,
                 onProgress: { [weak self] progress in
                     guard let self else { return }
                     if Thread.isMainThread {
@@ -495,6 +538,13 @@ final class PhotogrammetryViewModel: ObservableObject {
         invalidatePrewarm(cleanupOutput: true)
     }
 
+    /// Reacts to capture-option changes by restarting high-quality prewarm generation if relevant.
+    private func handleCaptureOptionsChange() {
+        guard canImportImages else { return }
+        guard selectedQuality == .high else { return }
+        maybeStartPrewarmGeneration(forceRestart: true)
+    }
+
     /// Starts a detached high-quality generation to reduce perceived latency on Generate.
     /// - Parameter forceRestart: Whether to restart even when snapshot did not change.
     private func maybeStartPrewarmGeneration(forceRestart: Bool = false) {
@@ -512,6 +562,8 @@ final class PhotogrammetryViewModel: ObservableObject {
 
         let token = UUID()
         let service = self.service
+        let featureSensitivity = selectedFeatureSensitivity.value
+        let isObjectMaskingEnabled = self.isObjectMaskingEnabled
         var generation = PrewarmGeneration(
             token: token,
             imageSnapshot: snapshot,
@@ -526,6 +578,8 @@ final class PhotogrammetryViewModel: ObservableObject {
             return try await service.generateUSDZ(
                 from: snapshot,
                 detail: .full,
+                featureSensitivity: featureSensitivity,
+                isObjectMaskingEnabled: isObjectMaskingEnabled,
                 onProgress: { [weak self] progress in
                     guard let self else { return }
                     if Thread.isMainThread {

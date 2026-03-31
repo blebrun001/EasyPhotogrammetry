@@ -22,6 +22,22 @@ protocol PhotogrammetryServicing: Sendable {
         detail: PhotogrammetrySession.Request.Detail,
         onProgress: @escaping @Sendable (Double) -> Void
     ) async throws -> URL
+    /// Generates a USDZ model with explicit photogrammetry configuration options.
+    /// - Parameters:
+    ///   - imageURLs: Candidate image file URLs.
+    ///   - detail: Output quality level for Object Capture.
+    ///   - featureSensitivity: Feature sensitivity used by Object Capture.
+    ///   - isObjectMaskingEnabled: Whether object masking is enabled.
+    ///   - onProgress: Callback invoked with request progress updates.
+    /// - Returns: URL of the generated USDZ model.
+    /// - Throws: `PhotogrammetryServiceError` or underlying runtime errors.
+    func generateUSDZ(
+        from imageURLs: [URL],
+        detail: PhotogrammetrySession.Request.Detail,
+        featureSensitivity: PhotogrammetrySession.Configuration.FeatureSensitivity,
+        isObjectMaskingEnabled: Bool,
+        onProgress: @escaping @Sendable (Double) -> Void
+    ) async throws -> URL
     /// Removes temporary workspace artifacts associated with a previously generated model.
     /// - Parameter outputURL: Model URL returned by `generateUSDZ`.
     func cleanupGeneratedModel(at outputURL: URL)
@@ -32,6 +48,8 @@ typealias PhotogrammetrySessionRunner = @Sendable (
     _ inputDirectory: URL,
     _ outputURL: URL,
     _ detail: PhotogrammetrySession.Request.Detail,
+    _ featureSensitivity: PhotogrammetrySession.Configuration.FeatureSensitivity,
+    _ isObjectMaskingEnabled: Bool,
     _ onProgress: @escaping @Sendable (Double) -> Void
 ) async throws -> Void
 
@@ -55,11 +73,13 @@ enum PhotogrammetryServiceError: LocalizedError, Equatable {
 
 /// Concrete RealityKit-backed implementation for Apple Object Capture.
 final class PhotogrammetryService: PhotogrammetryServicing, @unchecked Sendable {
-    private static let defaultSessionRunner: PhotogrammetrySessionRunner = { inputDirectory, outputURL, detail, onProgress in
+    private static let defaultSessionRunner: PhotogrammetrySessionRunner = { inputDirectory, outputURL, detail, featureSensitivity, isObjectMaskingEnabled, onProgress in
         try await runRealityKitSession(
             inputDirectory: inputDirectory,
             outputURL: outputURL,
             detail: detail,
+            featureSensitivity: featureSensitivity,
+            isObjectMaskingEnabled: isObjectMaskingEnabled,
             onProgress: onProgress
         )
     }
@@ -97,7 +117,13 @@ final class PhotogrammetryService: PhotogrammetryServicing, @unchecked Sendable 
     /// - Returns: URL of the generated USDZ file.
     /// - Throws: `PhotogrammetryServiceError` or session errors.
     func generateUSDZ(from imageURLs: [URL], detail: PhotogrammetrySession.Request.Detail) async throws -> URL {
-        try await generateUSDZ(from: imageURLs, detail: detail, onProgress: { _ in })
+        try await generateUSDZ(
+            from: imageURLs,
+            detail: detail,
+            featureSensitivity: .normal,
+            isObjectMaskingEnabled: false,
+            onProgress: { _ in }
+        )
     }
 
     /// Validates images, stages them into an isolated workspace, runs Object Capture, and returns output URL.
@@ -110,6 +136,31 @@ final class PhotogrammetryService: PhotogrammetryServicing, @unchecked Sendable 
     func generateUSDZ(
         from imageURLs: [URL],
         detail: PhotogrammetrySession.Request.Detail,
+        onProgress: @escaping @Sendable (Double) -> Void
+    ) async throws -> URL {
+        try await generateUSDZ(
+            from: imageURLs,
+            detail: detail,
+            featureSensitivity: .normal,
+            isObjectMaskingEnabled: false,
+            onProgress: onProgress
+        )
+    }
+
+    /// Validates images, stages them into an isolated workspace, runs Object Capture, and returns output URL.
+    /// - Parameters:
+    ///   - imageURLs: Candidate image URLs.
+    ///   - detail: Requested Object Capture detail level.
+    ///   - featureSensitivity: Feature sensitivity used by Object Capture.
+    ///   - isObjectMaskingEnabled: Whether object masking is enabled.
+    ///   - onProgress: Callback receiving progress updates in `[0, 1]`.
+    /// - Returns: URL of the generated USDZ file.
+    /// - Throws: `PhotogrammetryServiceError` when unsupported, input is empty, or output is missing.
+    func generateUSDZ(
+        from imageURLs: [URL],
+        detail: PhotogrammetrySession.Request.Detail,
+        featureSensitivity: PhotogrammetrySession.Configuration.FeatureSensitivity,
+        isObjectMaskingEnabled: Bool,
         onProgress: @escaping @Sendable (Double) -> Void
     ) async throws -> URL {
         guard isPhotogrammetrySupported() else {
@@ -129,7 +180,7 @@ final class PhotogrammetryService: PhotogrammetryServicing, @unchecked Sendable 
 
         defer { temporaryStore.removeInputDirectoryIfPresent(at: inputDirectory) }
 
-        try await sessionRunner(inputDirectory, outputURL, detail, onProgress)
+        try await sessionRunner(inputDirectory, outputURL, detail, featureSensitivity, isObjectMaskingEnabled, onProgress)
 
         guard fileManager.fileExists(atPath: outputURL.path) else {
             throw PhotogrammetryServiceError.outputNotFound(outputURL)
@@ -183,9 +234,13 @@ final class PhotogrammetryService: PhotogrammetryServicing, @unchecked Sendable 
         inputDirectory: URL,
         outputURL: URL,
         detail: PhotogrammetrySession.Request.Detail,
+        featureSensitivity: PhotogrammetrySession.Configuration.FeatureSensitivity,
+        isObjectMaskingEnabled: Bool,
         onProgress: @escaping @Sendable (Double) -> Void
     ) async throws {
-        let config = PhotogrammetrySession.Configuration()
+        var config = PhotogrammetrySession.Configuration()
+        config.featureSensitivity = featureSensitivity
+        config.isObjectMaskingEnabled = isObjectMaskingEnabled
         let session = try PhotogrammetrySession(input: inputDirectory, configuration: config)
 
         try await withTaskCancellationHandler {

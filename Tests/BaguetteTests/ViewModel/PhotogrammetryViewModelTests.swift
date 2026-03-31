@@ -9,7 +9,7 @@ struct PhotogrammetryViewModelTests {
     @MainActor
     func unsupportedInitState() {
         let viewModel = PhotogrammetryViewModel(
-            service: StubPhotogrammetryService { _, _, _ in URL(fileURLWithPath: "/tmp/never.usdz") },
+            service: StubPhotogrammetryService { _, _, _, _, _ in URL(fileURLWithPath: "/tmp/never.usdz") },
             isPhotogrammetrySupported: { false }
         )
 
@@ -92,7 +92,7 @@ struct PhotogrammetryViewModelTests {
     func generationSuccess() async {
         let outputURL = URL(fileURLWithPath: "/tmp/success.usdz")
         let viewModel = PhotogrammetryViewModel(
-            service: StubPhotogrammetryService { _, _, onProgress in
+            service: StubPhotogrammetryService { _, _, _, _, onProgress in
                 onProgress(-0.5)
                 onProgress(1.6)
                 try await Task.sleep(nanoseconds: 150_000_000)
@@ -137,7 +137,7 @@ struct PhotogrammetryViewModelTests {
         let viewModel = PhotogrammetryViewModel(
             service: StubPhotogrammetryService(
                 tracker: tracker,
-                handler: { _, _, _ in
+                handler: { _, _, _, _, _ in
                     try await Task.sleep(nanoseconds: 150_000_000)
                     return URL(fileURLWithPath: "/tmp/prewarm_auto.usdz")
                 }
@@ -163,7 +163,7 @@ struct PhotogrammetryViewModelTests {
         let viewModel = PhotogrammetryViewModel(
             service: StubPhotogrammetryService(
                 tracker: tracker,
-                handler: { _, _, _ in
+                handler: { _, _, _, _, _ in
                     try await Task.sleep(nanoseconds: 80_000_000)
                     return outputURL
                 }
@@ -193,7 +193,7 @@ struct PhotogrammetryViewModelTests {
         let viewModel = PhotogrammetryViewModel(
             service: StubPhotogrammetryService(
                 tracker: tracker,
-                handler: { _, _, onProgress in
+                handler: { _, _, _, _, onProgress in
                     onProgress(0.15)
                     try await Task.sleep(nanoseconds: 120_000_000)
                     onProgress(0.70)
@@ -231,7 +231,7 @@ struct PhotogrammetryViewModelTests {
         let outputURL = URL(fileURLWithPath: "/tmp/prewarm_catchup.usdz")
         let viewModel = PhotogrammetryViewModel(
             service: StubPhotogrammetryService(
-                handler: { _, _, onProgress in
+                handler: { _, _, _, _, onProgress in
                     onProgress(0.72)
                     try await Task.sleep(nanoseconds: 320_000_000)
                     return outputURL
@@ -261,7 +261,7 @@ struct PhotogrammetryViewModelTests {
         let viewModel = PhotogrammetryViewModel(
             service: StubPhotogrammetryService(
                 tracker: tracker,
-                handler: { _, _, _ in prewarmOutput }
+                handler: { _, _, _, _, _ in prewarmOutput }
             ),
             isPhotogrammetrySupported: { true }
         )
@@ -284,7 +284,7 @@ struct PhotogrammetryViewModelTests {
         let viewModel = PhotogrammetryViewModel(
             service: StubPhotogrammetryService(
                 tracker: tracker,
-                handler: { _, _, _ in
+                handler: { _, _, _, _, _ in
                     let count = await tracker.generateCallCount()
                     return count <= 1 ? prewarmOutput : classicOutput
                 }
@@ -317,7 +317,7 @@ struct PhotogrammetryViewModelTests {
         let viewModel = PhotogrammetryViewModel(
             service: StubPhotogrammetryService(
                 tracker: tracker,
-                handler: { _, _, _ in
+                handler: { _, _, _, _, _ in
                     URL(fileURLWithPath: "/tmp/relaunch_\(UUID().uuidString).usdz")
                 }
             ),
@@ -342,7 +342,7 @@ struct PhotogrammetryViewModelTests {
         let viewModel = PhotogrammetryViewModel(
             service: StubPhotogrammetryService(
                 tracker: tracker,
-                handler: { _, detail, _ in
+                handler: { _, detail, _, _, _ in
                     return detail == .medium
                         ? mediumOutput
                         : URL(fileURLWithPath: "/tmp/high_prewarm.usdz")
@@ -373,7 +373,7 @@ struct PhotogrammetryViewModelTests {
     @MainActor
     func generationFailure() async {
         let viewModel = PhotogrammetryViewModel(
-            service: StubPhotogrammetryService { _, _, _ in throw ViewModelTestError.expectedFailure },
+            service: StubPhotogrammetryService { _, _, _, _, _ in throw ViewModelTestError.expectedFailure },
             isPhotogrammetrySupported: { true }
         )
         viewModel.handleImportedImageURLs([URL(fileURLWithPath: "/tmp/a.jpg")], behavior: .append)
@@ -389,7 +389,7 @@ struct PhotogrammetryViewModelTests {
     @MainActor
     func cancellation() async {
         let viewModel = PhotogrammetryViewModel(
-            service: StubPhotogrammetryService { _, _, _ in
+            service: StubPhotogrammetryService { _, _, _, _, _ in
                 while true {
                     try Task.checkCancellation()
                     try await Task.sleep(nanoseconds: 20_000_000)
@@ -422,7 +422,7 @@ struct PhotogrammetryViewModelTests {
         fakeFileManager.existingPaths = [destinationWithoutExtension.appendingPathExtension("usdz").path]
 
         let viewModel = PhotogrammetryViewModel(
-            service: StubPhotogrammetryService { _, _, _ in sourceURL },
+            service: StubPhotogrammetryService { _, _, _, _, _ in sourceURL },
             isPhotogrammetrySupported: { true },
             fileManager: fakeFileManager
         )
@@ -448,7 +448,7 @@ struct PhotogrammetryViewModelTests {
             return outputURL
         }
         let viewModel = PhotogrammetryViewModel(
-            service: StubPhotogrammetryService { _, _, _ in URL(fileURLWithPath: "/tmp/model.usdz") },
+            service: StubPhotogrammetryService { _, _, _, _, _ in URL(fileURLWithPath: "/tmp/model.usdz") },
             scalingUseCase: scalingUseCase,
             isPhotogrammetrySupported: { true }
         )
@@ -473,7 +473,7 @@ struct PhotogrammetryViewModelTests {
         let scalingUseCase = StubScalingUseCase { _ in outputURL }
 
         let viewModel = PhotogrammetryViewModel(
-            service: StubPhotogrammetryService { _, _, _ in URL(fileURLWithPath: "/tmp/model.usdz") },
+            service: StubPhotogrammetryService { _, _, _, _, _ in URL(fileURLWithPath: "/tmp/model.usdz") },
             scalingUseCase: scalingUseCase,
             isPhotogrammetrySupported: { true }
         )
@@ -502,7 +502,7 @@ struct PhotogrammetryViewModelTests {
             throw ViewModelTestError.expectedFailure
         }
         let viewModel = PhotogrammetryViewModel(
-            service: StubPhotogrammetryService { _, _, _ in URL(fileURLWithPath: "/tmp/model.usdz") },
+            service: StubPhotogrammetryService { _, _, _, _, _ in URL(fileURLWithPath: "/tmp/model.usdz") },
             scalingUseCase: scalingUseCase,
             isPhotogrammetrySupported: { true }
         )
@@ -551,7 +551,7 @@ struct PhotogrammetryViewModelTests {
     @MainActor
     func applyMeasuredDistance() {
         let viewModel = PhotogrammetryViewModel(
-            service: StubPhotogrammetryService { _, _, _ in URL(fileURLWithPath: "/tmp/model.usdz") },
+            service: StubPhotogrammetryService { _, _, _, _, _ in URL(fileURLWithPath: "/tmp/model.usdz") },
             isPhotogrammetrySupported: { true }
         )
 
@@ -564,7 +564,7 @@ struct PhotogrammetryViewModelTests {
     @MainActor
     func handleMeasurementUpdate() {
         let viewModel = PhotogrammetryViewModel(
-            service: StubPhotogrammetryService { _, _, _ in URL(fileURLWithPath: "/tmp/model.usdz") },
+            service: StubPhotogrammetryService { _, _, _, _, _ in URL(fileURLWithPath: "/tmp/model.usdz") },
             isPhotogrammetrySupported: { true }
         )
 
@@ -583,7 +583,7 @@ struct PhotogrammetryViewModelTests {
     @MainActor
     func selectedScaleFileReset() {
         let viewModel = PhotogrammetryViewModel(
-            service: StubPhotogrammetryService { _, _, _ in URL(fileURLWithPath: "/tmp/model.usdz") },
+            service: StubPhotogrammetryService { _, _, _, _, _ in URL(fileURLWithPath: "/tmp/model.usdz") },
             isPhotogrammetrySupported: { true }
         )
 
@@ -604,7 +604,7 @@ struct PhotogrammetryViewModelTests {
     @MainActor
     private func makeViewModel() -> PhotogrammetryViewModel {
         PhotogrammetryViewModel(
-            service: StubPhotogrammetryService { _, _, _ in URL(fileURLWithPath: "/tmp/model.usdz") },
+            service: StubPhotogrammetryService { _, _, _, _, _ in URL(fileURLWithPath: "/tmp/model.usdz") },
             isPhotogrammetrySupported: { true }
         )
     }
@@ -653,6 +653,8 @@ private struct StubPhotogrammetryService: PhotogrammetryServicing {
     let handler: @Sendable (
         _ imageURLs: [URL],
         _ detail: PhotogrammetrySession.Request.Detail,
+        _ featureSensitivity: PhotogrammetrySession.Configuration.FeatureSensitivity,
+        _ isObjectMaskingEnabled: Bool,
         _ onProgress: @escaping @Sendable (Double) -> Void
     ) async throws -> URL
 
@@ -661,6 +663,8 @@ private struct StubPhotogrammetryService: PhotogrammetryServicing {
         handler: @escaping @Sendable (
             _ imageURLs: [URL],
             _ detail: PhotogrammetrySession.Request.Detail,
+            _ featureSensitivity: PhotogrammetrySession.Configuration.FeatureSensitivity,
+            _ isObjectMaskingEnabled: Bool,
             _ onProgress: @escaping @Sendable (Double) -> Void
         ) async throws -> URL
     ) {
@@ -670,7 +674,7 @@ private struct StubPhotogrammetryService: PhotogrammetryServicing {
 
     func generateUSDZ(from imageURLs: [URL], detail: PhotogrammetrySession.Request.Detail) async throws -> URL {
         await tracker?.recordGenerateCall(detailRawValue: detail.rawValue)
-        return try await handler(imageURLs, detail, { _ in })
+        return try await handler(imageURLs, detail, .normal, false, { _ in })
     }
 
     func generateUSDZ(
@@ -679,7 +683,18 @@ private struct StubPhotogrammetryService: PhotogrammetryServicing {
         onProgress: @escaping @Sendable (Double) -> Void
     ) async throws -> URL {
         await tracker?.recordGenerateCall(detailRawValue: detail.rawValue)
-        return try await handler(imageURLs, detail, onProgress)
+        return try await handler(imageURLs, detail, .normal, false, onProgress)
+    }
+
+    func generateUSDZ(
+        from imageURLs: [URL],
+        detail: PhotogrammetrySession.Request.Detail,
+        featureSensitivity: PhotogrammetrySession.Configuration.FeatureSensitivity,
+        isObjectMaskingEnabled: Bool,
+        onProgress: @escaping @Sendable (Double) -> Void
+    ) async throws -> URL {
+        await tracker?.recordGenerateCall(detailRawValue: detail.rawValue)
+        return try await handler(imageURLs, detail, featureSensitivity, isObjectMaskingEnabled, onProgress)
     }
 
     func cleanupGeneratedModel(at outputURL: URL) {

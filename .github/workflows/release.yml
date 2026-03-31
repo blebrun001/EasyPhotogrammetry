@@ -42,6 +42,8 @@ jobs:
             ARCHS=arm64 \
             ONLY_ACTIVE_ARCH=YES \
             CODE_SIGNING_ALLOWED=NO \
+            INFOPLIST_KEY_CFBundleShortVersionString="${{ steps.version.outputs.version }}" \
+            INFOPLIST_KEY_CFBundleVersion="${{ github.run_number }}" \
             build
 
       - name: Create DMG

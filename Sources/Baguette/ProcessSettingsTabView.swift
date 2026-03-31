@@ -28,17 +28,36 @@ struct ProcessSettingsTabView: View {
     }
 
     private var configurationSection: some View {
-        LabeledContent("Quality") {
-            Picker("Quality", selection: $viewModel.selectedQuality) {
-                ForEach(ModelQuality.allCases) { quality in
-                    Text(quality.label)
-                        .tag(quality)
+        VStack(spacing: 8) {
+            LabeledContent("Quality") {
+                Picker("Quality", selection: $viewModel.selectedQuality) {
+                    ForEach(ModelQuality.allCases) { quality in
+                        Text(quality.label)
+                            .tag(quality)
+                    }
                 }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .disabled(!viewModel.canImportImages)
+                .help("Choose model quality before generation.")
             }
-            .pickerStyle(.menu)
-            .labelsHidden()
-            .disabled(!viewModel.canImportImages)
-            .help("Choose model quality before generation.")
+
+            LabeledContent("Feature Sensitivity") {
+                Picker("Feature Sensitivity", selection: $viewModel.selectedFeatureSensitivity) {
+                    ForEach(FeatureSensitivityOption.allCases) { option in
+                        Text(option.label)
+                            .tag(option)
+                    }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .disabled(!viewModel.canImportImages)
+                .help("Controls how aggressively Object Capture detects image features.")
+            }
+
+            Toggle("Remove Environment", isOn: $viewModel.isObjectMaskingEnabled)
+                .disabled(!viewModel.canImportImages)
+                .help("When enabled, Object Capture attempts to isolate the object from the background.")
         }
     }
 

@@ -34,22 +34,32 @@ struct BaguetteApp: App {
     /// Displays a custom About panel with license and version details.
     private func showAboutPanel() {
         let appName = Bundle.main.object(forInfoDictionaryKey: "CFBundleName") as? String ?? "Baguette"
-        let shortVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
         let buildVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
-        let versionString = shortVersion == buildVersion ? shortVersion : "\(shortVersion) (\(buildVersion))"
-        let copyright = "Copyright (C) 2026 Brice Lebrun"
-        let credits = NSAttributedString(
-            string: """
-            Licensed under the GNU General Public License v3.0.
-            See LICENSE at the root of this project.
-            """
+        let madeBy = "Made by Brice Lebrun - IPHES-CERCA"
+        let githubURL = URL(string: "https://github.com/blebrun001/Baguette")!
+        let centeredParagraphStyle = NSMutableParagraphStyle()
+        centeredParagraphStyle.alignment = .center
+        let credits = NSMutableAttributedString(
+            string: "License: GNU General Public License v3.0 (GPL-3.0).\n\n",
+            attributes: [.paragraphStyle: centeredParagraphStyle]
+        )
+        credits.append(
+            NSAttributedString(
+                string: "GitHub Repository",
+                attributes: [
+                    .paragraphStyle: centeredParagraphStyle,
+                    .link: githubURL,
+                    .foregroundColor: NSColor.linkColor,
+                    .underlineStyle: NSUnderlineStyle.single.rawValue,
+                ]
+            )
         )
 
         NSApp.orderFrontStandardAboutPanel(
             options: [
                 .applicationName: appName,
-                .version: versionString,
-                .copyright: copyright,
+                .version: buildVersion,
+                .copyright: madeBy,
                 .credits: credits,
             ]
         )
