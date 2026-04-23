@@ -110,7 +110,7 @@ final class USDZScaler: USDZScaling, @unchecked Sendable {
             throw ScalingError.loadFailed("The asset does not contain any mesh/object.")
         }
 
-        applyScale(factor, to: asset)
+        try bakeScale(factor, into: asset)
 
         let temporaryURL = makeTemporaryOutputURL(near: destinationURL)
         do {
@@ -136,10 +136,10 @@ final class USDZScaler: USDZScaling, @unchecked Sendable {
             throw ScalingError.loadFailed(error.localizedDescription)
         }
 
-        applyScale(factor, to: scene.rootNode)
+        let bakedScene = makeFlattenedBakedScene(from: scene, factor: factor)
 
         let temporaryURL = makeTemporaryOutputURL(near: destinationURL)
-        scene.write(to: temporaryURL, options: nil, delegate: nil, progressHandler: nil)
+        bakedScene.write(to: temporaryURL, options: nil, delegate: nil, progressHandler: nil)
 
         try finalizeOutput(from: temporaryURL, to: destinationURL)
     }
@@ -176,52 +176,161 @@ final class USDZScaler: USDZScaling, @unchecked Sendable {
             .appendingPathComponent(".tmp_scaled_\(UUID().uuidString).usdz")
     }
 
-    /// Applies a uniform scale to a SceneKit node hierarchy.
-    /// - Parameters:
-    ///   - factor: Multiplicative factor.
-    ///   - root: Root node to scale recursively.
-    private func applyScale(_ factor: CGFloat, to root: SCNNode) {
-        root.scale = SCNVector3(root.scale.x * factor, root.scale.y * factor, root.scale.z * factor)
-
-        root.enumerateChildNodes { node, _ in
-            node.scale = SCNVector3(node.scale.x * factor, node.scale.y * factor, node.scale.z * factor)
-        }
-    }
-
-    /// Applies a uniform scale to each root object of a Model I/O asset.
+    /// Bakes a uniform scale into each mesh of a Model I/O asset and removes scale from transforms.
     /// - Parameters:
     ///   - factor: Multiplicative factor.
     ///   - asset: Asset containing all objects to transform.
-    private func applyScale(_ factor: Float, to asset: MDLAsset) {
+    private func bakeScale(_ factor: Float, into asset: MDLAsset) throws {
         for index in 0..<asset.count {
-            applyScaleRecursively(factor, to: asset.object(at: index))
+            try bakeScaleRecursively(for: asset.object(at: index), inheritedScale: factor)
         }
     }
 
-    /// Recursively multiplies each object's transform matrix by a uniform scale matrix.
+    /// Applies a uniform scale transform to each node in the SceneKit hierarchy.
     /// - Parameters:
     ///   - factor: Multiplicative factor.
+    ///   - root: Root node to scale recursively.
+    private func applyScaleTransforms(_ factor: CGFloat, to root: SCNNode) {
+        root.scale = SCNVector3(root.scale.x * factor, root.scale.y * factor, root.scale.z * factor)
+    }
+
+    /// Builds a SceneKit scene where scale transforms are baked into geometry.
+    /// - Parameters:
+    ///   - sourceScene: Source scene to scale.
+    ///   - factor: Multiplicative factor.
+    /// - Returns: New scene containing flattened geometry with identity scales.
+    private func makeFlattenedBakedScene(from sourceScene: SCNScene, factor: CGFloat) -> SCNScene {
+        let workingScene = SCNScene()
+        let importedRoot = sourceScene.rootNode.clone()
+        workingScene.rootNode.addChildNode(importedRoot)
+        applyScaleTransforms(factor, to: importedRoot)
+
+        let flattenedRoot = workingScene.rootNode.flattenedClone()
+        flattenedRoot.scale = SCNVector3(1, 1, 1)
+
+        let bakedScene = SCNScene()
+        bakedScene.rootNode.addChildNode(flattenedRoot)
+        return bakedScene
+    }
+
+    /// Recursively bakes scale into mesh vertices while preserving translation and rotation.
+    /// - Parameters:
     ///   - object: Current object in the recursion.
-    private func applyScaleRecursively(_ factor: Float, to object: MDLObject) {
-        let transform = (object.transform as? MDLTransform) ?? MDLTransform()
-        let scaleMatrix = uniformScaleMatrix(factor)
-        transform.matrix = simd_mul(transform.matrix, scaleMatrix)
+    ///   - inheritedScale: Uniform scale accumulated from ancestors.
+    private func bakeScaleRecursively(for object: MDLObject, inheritedScale: Float) throws {
+        let localTransform = ((object.transform as? MDLTransform)?.matrix) ?? matrix_identity_float4x4
+        let localScale = uniformScale(in: localTransform)
+        let cumulativeScale = inheritedScale * localScale
+
+        if let mesh = object as? MDLMesh {
+            try bakeScale(cumulativeScale, into: mesh)
+        }
+
+        let transform = MDLTransform()
+        transform.matrix = matrixRemovingScale(from: localTransform)
         object.transform = transform
 
         for child in object.children.objects {
-            applyScaleRecursively(factor, to: child)
+            try bakeScaleRecursively(for: child, inheritedScale: cumulativeScale)
         }
     }
 
-    /// Builds a 4x4 uniform scale matrix.
-    /// - Parameter factor: Uniform scale factor.
-    /// - Returns: Matrix suitable for post-multiplying object transforms.
-    private func uniformScaleMatrix(_ factor: Float) -> simd_float4x4 {
-        simd_float4x4(
-            SIMD4<Float>(factor, 0, 0, 0),
-            SIMD4<Float>(0, factor, 0, 0),
-            SIMD4<Float>(0, 0, factor, 0),
-            SIMD4<Float>(0, 0, 0, 1)
-        )
+    /// Bakes a uniform scale directly into a Model I/O mesh vertex buffer.
+    /// - Parameters:
+    ///   - factor: Uniform scale factor to bake.
+    ///   - mesh: Target mesh to mutate in place.
+    private func bakeScale(_ factor: Float, into mesh: MDLMesh) throws {
+        guard factor != 1 else { return }
+
+        guard let positions = mesh.vertexAttributeData(forAttributeNamed: MDLVertexAttributePosition, as: .float3) else {
+            throw ScalingError.loadFailed("The asset contains a mesh without float3 position data.")
+        }
+        guard positions.stride >= MemoryLayout<Float>.size * 3 else {
+            throw ScalingError.loadFailed("Unsupported mesh position layout.")
+        }
+
+        let writablePositionCount = writableVertexCount(in: positions, expectedVertexCount: mesh.vertexCount)
+        guard writablePositionCount > 0 else {
+            throw ScalingError.loadFailed("The mesh position buffer is empty or invalid.")
+        }
+
+        for index in 0..<writablePositionCount {
+            let base = positions.dataStart.advanced(by: index * positions.stride)
+            let x = readFloat(from: base, offset: 0) * factor
+            let y = readFloat(from: base, offset: MemoryLayout<Float>.size) * factor
+            let z = readFloat(from: base, offset: MemoryLayout<Float>.size * 2) * factor
+            writeFloat(x, to: base, offset: 0)
+            writeFloat(y, to: base, offset: MemoryLayout<Float>.size)
+            writeFloat(z, to: base, offset: MemoryLayout<Float>.size * 2)
+        }
+
+        if let normals = mesh.vertexAttributeData(forAttributeNamed: MDLVertexAttributeNormal, as: .float3) {
+            guard normals.stride >= MemoryLayout<Float>.size * 3 else {
+                throw ScalingError.loadFailed("Unsupported mesh normal layout.")
+            }
+            let writableNormalCount = writableVertexCount(in: normals, expectedVertexCount: mesh.vertexCount)
+            for index in 0..<writableNormalCount {
+                let base = normals.dataStart.advanced(by: index * normals.stride)
+                let value = SIMD3<Float>(
+                    readFloat(from: base, offset: 0),
+                    readFloat(from: base, offset: MemoryLayout<Float>.size),
+                    readFloat(from: base, offset: MemoryLayout<Float>.size * 2)
+                )
+                let length = simd_length(value)
+                if length > 0 {
+                    let normalized = simd_normalize(value)
+                    writeFloat(normalized.x, to: base, offset: 0)
+                    writeFloat(normalized.y, to: base, offset: MemoryLayout<Float>.size)
+                    writeFloat(normalized.z, to: base, offset: MemoryLayout<Float>.size * 2)
+                }
+            }
+        }
+    }
+
+    /// Extracts the uniform scale encoded in a transform matrix.
+    /// - Parameter matrix: Transform matrix whose basis vectors encode local scale.
+    /// - Returns: Average basis magnitude, assuming a uniform scale.
+    private func uniformScale(in matrix: simd_float4x4) -> Float {
+        let x = simd_length(SIMD3<Float>(matrix.columns.0.x, matrix.columns.0.y, matrix.columns.0.z))
+        let y = simd_length(SIMD3<Float>(matrix.columns.1.x, matrix.columns.1.y, matrix.columns.1.z))
+        let z = simd_length(SIMD3<Float>(matrix.columns.2.x, matrix.columns.2.y, matrix.columns.2.z))
+        return (x + y + z) / 3
+    }
+
+    /// Removes the scale component from a transform matrix while preserving translation and rotation.
+    /// - Parameter matrix: Transform matrix to normalize.
+    /// - Returns: Equivalent transform with identity scale.
+    private func matrixRemovingScale(from matrix: simd_float4x4) -> simd_float4x4 {
+        let scale = max(uniformScale(in: matrix), .leastNonzeroMagnitude)
+        var normalized = matrix
+        normalized.columns.0 /= scale
+        normalized.columns.1 /= scale
+        normalized.columns.2 /= scale
+        normalized.columns.3.w = 1
+        return normalized
+    }
+
+    /// Reads a float at byte offset from a raw memory address without alignment assumptions.
+    private func readFloat(from pointer: UnsafeRawPointer, offset: Int) -> Float {
+        var value: Float = 0
+        memcpy(&value, pointer.advanced(by: offset), MemoryLayout<Float>.size)
+        return value
+    }
+
+    /// Writes a float at byte offset to a raw memory address without alignment assumptions.
+    private func writeFloat(_ value: Float, to pointer: UnsafeMutableRawPointer, offset: Int) {
+        var valueCopy = value
+        memcpy(pointer.advanced(by: offset), &valueCopy, MemoryLayout<Float>.size)
+    }
+
+    /// Returns a safe writable vertex count from mapped attribute metadata.
+    /// - Parameters:
+    ///   - attributeData: Mapped attribute data.
+    ///   - expectedVertexCount: Expected count from mesh metadata.
+    /// - Returns: Count clamped to underlying mapped buffer length.
+    private func writableVertexCount(in attributeData: MDLVertexAttributeData, expectedVertexCount: Int) -> Int {
+        guard attributeData.stride > 0 else { return 0 }
+        guard attributeData.bufferSize > 0 else { return expectedVertexCount }
+        return min(expectedVertexCount, attributeData.bufferSize / attributeData.stride)
     }
 }
