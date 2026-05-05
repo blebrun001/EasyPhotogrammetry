@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="Sources/Baguette/Resources/Assets.xcassets/AppIcon.appiconset/icon_128x128.png" alt="Baguette icon" width="72" />
+  <img src="Sources/EasyPhotogrammetry/Resources/Assets.xcassets/AppIcon.appiconset/icon_128x128.png" alt="EasyPhotogrammetry icon" width="72" />
 </p>
 
-# Baguette
+# EasyPhotogrammetry
 
 macOS app (SwiftUI + RealityKit) to generate a `.usdz` 3D model from images (Apple Object Capture).
 
@@ -26,7 +26,7 @@ swift test
 ## Build App (Xcode)
 
 ```bash
-xcodebuild -project Baguette.xcodeproj -scheme Baguette -configuration Debug -destination 'platform=macOS' build
+xcodebuild -project EasyPhotogrammetry.xcodeproj -scheme EasyPhotogrammetry -configuration Debug -destination 'platform=macOS' build
 ```
 
 ## License

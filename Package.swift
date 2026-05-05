@@ -2,20 +2,20 @@
 import PackageDescription
 
 let package = Package(
-    name: "Baguette",
+    name: "EasyPhotogrammetry",
     platforms: [
         .macOS("26.0"),
     ],
     targets: [
         .executableTarget(
-            name: "Baguette",
+            name: "EasyPhotogrammetry",
             resources: [
                 .process("Resources"),
             ]
         ),
         .testTarget(
-            name: "BaguetteTests",
-            dependencies: ["Baguette"]
+            name: "EasyPhotogrammetryTests",
+            dependencies: ["EasyPhotogrammetry"]
         ),
     ]
 )

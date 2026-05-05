@@ -30,9 +30,9 @@ if [[ -z "$VERSION" ]]; then
   exit 1
 fi
 
-DMG_NAME="Baguette-${VERSION}-macos-arm64.dmg"
+DMG_NAME="EasyPhotogrammetry-${VERSION}-macos-arm64.dmg"
 DMG_PATH="$DIST_DIR/$DMG_NAME"
-VOLUME_NAME="Baguette ${VERSION}"
+VOLUME_NAME="EasyPhotogrammetry ${VERSION}"
 
 rm -rf "$STAGING_DIR"
 mkdir -p "$STAGING_DIR"
